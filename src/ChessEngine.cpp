@@ -93,6 +93,36 @@ Bitboard gen_bishop_mask(int square){
     return mask;
 }
 
+Bitboard gen_bishop_moves(int square, Bitboard boardState){
+    Bitboard moves = 0ULL;
+
+    int sRank = square / 8;
+    int sFile = square % 8;
+    int i, j;
+
+    for(i = sRank + 1, j = sFile + 1; i <= 7 && j <= 7; i++, j++){
+        moves |= 1ULL << (i*8 + j);
+        if(boardState[i*8 + j]) break;
+    }
+
+    for(i = sRank - 1, j = sFile - 1; i >= 0 && j >= 0; i--, j--){
+        moves |= 1ULL << (i*8 + j);
+        if(boardState[i*8 + j]) break;
+    }
+
+    for(i = sRank + 1, j = sFile - 1; i <= 7 && j >= 0; i++, j--){
+        moves |= 1ULL << (i*8 + j);
+        if(boardState[i*8 + j]) break;
+    }
+
+    for(i = sRank - 1, j = sFile + 1; i >= 0 && j <= 7; i--, j++){
+        moves |= 1ULL << (i*8 + j);
+        if(boardState[i*8 + j]) break;
+    }
+
+    return moves;
+}
+
 Bitboard gen_rook_mask(int square){
     Bitboard mask = 0ULL;
 
@@ -117,6 +147,36 @@ Bitboard gen_rook_mask(int square){
     }
 
     return mask;
+}
+
+Bitboard gen_rook_moves(int square, Bitboard boardState){
+    Bitboard moves = 0ULL;
+
+    int sRank = square / 8;
+    int sFile = square % 8;
+    int i, j;
+
+    for(i = sRank + 1; i <= 7; i++){
+        moves |= 1ULL << (i*8 + sFile);
+        if(boardState[i*8 + sFile]) break;
+    }
+
+    for(i = sRank - 1; i >= 0; i--){
+        moves |= 1ULL << (i*8 + sFile);
+        if(boardState[i*8 + sFile]) break;
+    }
+
+    for(j = sFile + 1;j <= 7; j++){
+        moves |= 1ULL << (sRank*8 + j);
+        if(boardState[sRank*8 + j]) break;
+    }
+
+    for(j = sFile - 1;j >= 0; j--){
+        moves |= 1ULL << (sRank*8 + j);
+        if(boardState[sRank*8 + j]) break;
+    }
+
+    return moves;
 }
 
 /*----------------------------------*/
@@ -194,8 +254,6 @@ void init_lookup_tables(){
 }
 
 int main(){
-    for(int i = 0; i < 64; i++)
-        printBitBoard(gen_rook_mask(i));
 
     return 0;
 }
