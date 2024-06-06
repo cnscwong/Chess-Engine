@@ -259,6 +259,37 @@ Bitboard mapOccupancy(int index, Bitboard mask){
     return map;
 }
 
+unsigned int randNum = 1804289383;
+
+// 32 bit random number generator
+unsigned int random32(){
+    unsigned int num = randNum;
+
+    num ^= num << 13;
+    num ^= num >> 17;
+    num ^= num << 5;
+
+    randNum = num;
+    
+    return num;
+}
+
+//64 bit random number generator
+unsigned long long random64(){
+    unsigned long long u1, u2, u3, u4;
+    
+    u1 = (unsigned long long)(random32()) & 0xFFFF;
+    u2 = (unsigned long long)(random32()) & 0xFFFF;
+    u3 = (unsigned long long)(random32()) & 0xFFFF;
+    u4 = (unsigned long long)(random32()) & 0xFFFF;
+
+    return u1 | (u2 << 16) | (u3 << 32) | (u4 << 48);
+}
+
+// macro to generate magic number candidates
+#define generateMagic() (random64() & random64() & random64())
+
+
 /*----------------------------------*/
 /*       Pre-calculating moves      */
 /*----------------------------------*/
@@ -338,12 +369,6 @@ void initLookupTables(){
 /*----------------------------------*/
 
 int main(){
-    for(int i = 0; i < 8; i++){
-        for(int j = 0; j < 8; j++){
-            std::cout << countBits(genRookMask(i*8+j)) << ", ";
-        }
-        std::cout << std::endl;
-    }
-
+    printBitBoard(generateMagic());
     return 0;
 }
