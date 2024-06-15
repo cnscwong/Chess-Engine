@@ -2,6 +2,7 @@
 #include <iostream>
 #include <string>
 #include <cstring>
+#include <map>
 
 /*----------------------------------*/
 /*       BOARD REPRESENTATION       */
@@ -32,9 +33,10 @@ constexpr Bitboard RANK_8 = 0x00000000000000FF;
 constexpr Bitboard ALL_SET = 0xFFFFFFFFFFFFFFFF;
 
 // Bitboard macros
-#define set(board, square) ((board) |= (1ULL << (square)))
-#define get(board, square) (((board) & (1ULL << (square))) ? 1:0)
-#define clear(board, square) ((board) &= ~(1ULL << (square)))
+#define sqr(square) (1ULL << (square))
+#define set(board, square) ((board) |= sqr(square))
+#define get(board, square) (((board) & sqr(square)) ? 1:0)
+#define clear(board, square) ((board) &= ~sqr(square))
 
 // enum for all squares, corresponds to their position on the bitboard
 enum Square {
@@ -46,7 +48,7 @@ enum Square {
     A3, B3, C3, D3, E3, F3, G3, H3,
     A2, B2, C2, D2, E2, F2, G2, H2,
     A1, B1, C1, D1, E1, F1, G1, H1,
-    numSquares
+    numSquares, no_sq
 };
 
 std::string toSquare[] = {
@@ -60,8 +62,87 @@ std::string toSquare[] = {
 "a1", "b1", "c1", "d1", "e1", "f1", "g1", "h1"
 };
 
-//Enum used to track colour of pieces... etc.
-enum Colour {White, Black, numColour};
+// Enum used to track colour of pieces... etc.
+enum Colour {White, Black, Both};
+
+// Enum used to track piece type, capitalized represents white
+enum Pieces {P, N, B, R, Q, K, p, n, b, r, q, k, numPieces};
+
+// Character representations of pieces
+const std::string pieceToChar = "PNBRQKpnbrqk";
+
+// Char to piece
+std::map<char, int> charToPiece = {{'P', P}, {'N', N}, {'B', B}, {'R', R}, {'Q', Q}, {'K', K}, {'p', p}, {'n', n}, {'b', b}, {'r', r}, {'q', q}, {'k', k}};
+
+// Enum for castling rights
+enum Castling {wKingside = 1, wQueenside = 2, bKingside = 4, bQueenside = 8};
+
+class Chessboard{
+    public:
+    // Bitboard for each piece
+    Bitboard pieceBoards[numPieces] = {0};
+    //White, Black, and all occupancies
+    Bitboard occupancies[3] = {0};
+    
+    Colour side = White;
+    int enpassant = no_sq;
+    int castle = wKingside | wQueenside | bKingside | bQueenside;
+
+    Chessboard(){
+        // Init white pieces
+        pieceBoards[P] = RANK_2;
+        pieceBoards[N] = sqr(B1) | sqr(G1);
+        pieceBoards[B] = sqr(C1) | sqr(F1);
+        pieceBoards[R] = sqr(A1) | sqr(H1);
+        pieceBoards[Q] = sqr(D1);
+        pieceBoards[K] = sqr(E1);
+
+        // Init black pieces
+        pieceBoards[p] = RANK_7;
+        pieceBoards[n] = sqr(B8) | sqr(G8);
+        pieceBoards[b] = sqr(C8) | sqr(F8);
+        pieceBoards[r] = sqr(A8) | sqr(H8);
+        pieceBoards[q] = sqr(D8);
+        pieceBoards[k] = sqr(E8);
+
+        for(int i = 0; i < 6; i++){
+            occupancies[White] |= pieceBoards[i];
+            occupancies[Black] |= pieceBoards[i + 6];
+        }
+
+        occupancies[Both] = occupancies[White] | occupancies[Black];
+    }
+
+    // debug print function
+    void printChessboard(){
+        for(int rank = 0; rank < 8; rank++){
+            std::cout << 8 - rank << "   ";
+            for(int file = 0; file < 8; file++){
+                int square = rank*8 + file;
+                int piece = -1;
+                
+                for(int i = P; i < numPieces; i++){
+                    if(get(pieceBoards[i], square)){
+                        piece = i;
+                        break;
+                    }
+                }
+
+                if(piece == -1){
+                    std::cout << ". ";
+                }else{
+                    std::cout << pieceToChar[piece] << " ";
+                }
+            }
+            std::cout << std::endl;
+        }
+        std::cout << std::endl;
+        std::cout << "    A B C D E F G H" << std::endl << std::endl;
+        std::cout << "Side: " << (side ? "Black":"White") << std::endl;
+        std::cout << "En Passant: " << (enpassant != no_sq ? toSquare[enpassant]:"None") << std::endl;
+        std::cout << "Castling: " << (castle & wKingside ? "WK":"-") << ", " << (castle & wQueenside ? "WQ":"-") << ", " << (castle & bKingside ? "BK":"-") << ", " << (castle & bQueenside ? "BQ":"-") << std::endl;
+    }
+};
 
 bool validSquare(int square){
     return square >= 0 && square < 64;
@@ -546,7 +627,7 @@ Bitboard genKingMoves(int square){
 /*----------------------------------*/
 
 // Piece lookup tables
-Bitboard pawn_attacks[numColour][numSquares];
+Bitboard pawn_attacks[2][numSquares];
 Bitboard knight_attacks[numSquares];
 Bitboard king_attacks[numSquares];
 Bitboard bishop_masks[numSquares];
@@ -629,14 +710,7 @@ void init(){
 int main(){
     init();
 
-    Bitboard occupancy = 0ULL;
-    set(occupancy, C5);
-    set(occupancy, F2);
-    set(occupancy, G7);
-    set(occupancy, B2);
-    set(occupancy, G5);
-    set(occupancy, E2);
-    set(occupancy, E7);
-    printBitBoard(getRookAttacks(E5, occupancy));
+    Chessboard chessboard = Chessboard();
+    printBitBoard(chessboard.occupancies[Both]);
     return 0;
 }
