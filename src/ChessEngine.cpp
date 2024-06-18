@@ -77,6 +77,13 @@ std::map<char, int> charToPiece = {{'P', P}, {'N', N}, {'B', B}, {'R', R}, {'Q',
 // Enum for castling rights
 enum Castling {wKingside = 1, wQueenside = 2, bKingside = 4, bQueenside = 8};
 
+// FEN debug positions
+#define empty_board "8/8/8/8/8/8/8/8 w - - "
+#define start_position "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1 "
+#define tricky_position "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1 "
+#define killer_position "rnbqkb1r/pp1p1pPp/8/2p1pP2/1P1P4/3P3P/P1P1P3/RNBQKBNR w KQkq e6 0 1"
+#define cmk_position "r2q1rk1/ppp2ppp/2n1bn2/2b1p3/3pP3/3P1NPP/PPP1NPB1/R1BQ1RK1 b - - 0 9 "
+
 class Chessboard{
     public:
     // Bitboard for each piece
@@ -86,7 +93,7 @@ class Chessboard{
     
     Colour side = White;
     int enpassant = no_sq;
-    int castle = wKingside | wQueenside | bKingside | bQueenside;
+    int castle = 0;
 
     Chessboard(){
         // Init white pieces
@@ -104,6 +111,70 @@ class Chessboard{
         pieceBoards[r] = sqr(A8) | sqr(H8);
         pieceBoards[q] = sqr(D8);
         pieceBoards[k] = sqr(E8);
+
+        for(int i = 0; i < 6; i++){
+            occupancies[White] |= pieceBoards[i];
+            occupancies[Black] |= pieceBoards[i + 6];
+        }
+
+        occupancies[Both] = occupancies[White] | occupancies[Black];
+        side = White;
+        enpassant = no_sq;
+        castle = wKingside | wQueenside | bKingside | bQueenside;
+    }
+
+    // Chessboard initializer with a FEN string
+    Chessboard(std::string fen){
+        int square = 0;
+        int index = 0;
+        while(square < numSquares){
+            if(isalpha(fen[index])){
+                int piece = charToPiece[fen[index]];
+
+                pieceBoards[piece] |= sqr(square);
+                square++;
+            }else if(isdigit(fen[index])){
+                square += (fen[index] - '0');
+            }
+
+            index++;
+        }
+
+        index++;
+        side = fen[index] == 'w' ? White:Black;
+        index += 2;
+
+        while(fen[index] != ' '){
+            switch (fen[index])
+            {
+            case 'K':
+                castle |= wKingside;
+                break;
+            case 'Q':
+                castle |= wQueenside;
+                break;
+            case 'k':
+                castle |= bKingside;
+                break;
+            case 'q':
+                castle |= bQueenside;
+                break;
+            default:
+                break;
+            }
+
+            index++;
+        }
+        index++;
+
+        if(fen[index] != '-'){
+            int file = fen[index++] - 'a';
+            int rank = 8 - (fen[index] - '0');
+
+            enpassant = rank*8 + file;            
+        }else{
+            enpassant = no_sq;
+        }
 
         for(int i = 0; i < 6; i++){
             occupancies[White] |= pieceBoards[i];
@@ -180,6 +251,18 @@ void printBitBoard(Bitboard board){
     std::cout << std::endl;
     std::cout << "    A B C D E F G H" << std::endl << std::endl << "ULL:" << board << std::endl << std::endl;
 }
+
+/*----------------------------------*/
+/*           LOOKUP TABLES          */
+/*----------------------------------*/
+
+Bitboard pawn_attacks[2][numSquares];
+Bitboard knight_attacks[numSquares];
+Bitboard king_attacks[numSquares];
+Bitboard bishop_masks[numSquares];
+Bitboard rook_masks[numSquares];
+Bitboard bishop_attacks[numSquares][512];
+Bitboard rook_attacks[numSquares][4096];
 
 /*----------------------------------*/
 /*          BISHOP AND ROOK         */
@@ -626,15 +709,6 @@ Bitboard genKingMoves(int square){
 /*          MOVE LOOKUP GEN         */
 /*----------------------------------*/
 
-// Piece lookup tables
-Bitboard pawn_attacks[2][numSquares];
-Bitboard knight_attacks[numSquares];
-Bitboard king_attacks[numSquares];
-Bitboard bishop_masks[numSquares];
-Bitboard rook_masks[numSquares];
-Bitboard bishop_attacks[numSquares][512];
-Bitboard rook_attacks[numSquares][4096];
-
 void initLeaperAttacks(){
     for(int i = 0; i < 64; i++){
         pawn_attacks[White][i] = genPawnAttacks(White, i);
@@ -676,7 +750,7 @@ void initSliderAttacks(){
     }
 }
 
-// get slider attacks
+// get bishop attacks
 static inline Bitboard getBishopAttacks(int square, Bitboard occupancy){
     occupancy &= bishop_masks[square];
     occupancy *= bishop_magics[square];
@@ -685,12 +759,18 @@ static inline Bitboard getBishopAttacks(int square, Bitboard occupancy){
     return bishop_attacks[square][occupancy];
 }
 
+// get rook attacks
 static inline Bitboard getRookAttacks(int square, Bitboard occupancy){
     occupancy &= rook_masks[square];
     occupancy *= rook_magics[square];
     occupancy >>= 64 - rookMaskBitcount[square];
 
     return rook_attacks[square][occupancy];
+}
+
+// get queen attacks
+static inline Bitboard getQueenAttacks(int square, Bitboard occupancy){
+    return getBishopAttacks(square, occupancy) | getRookAttacks(square, occupancy);
 }
 
 /*----------------------------------*/
@@ -710,7 +790,19 @@ void init(){
 int main(){
     init();
 
-    Chessboard chessboard = Chessboard();
-    printBitBoard(chessboard.occupancies[Both]);
+    Bitboard bitboard = 0ULL;
+
+    set(bitboard, B6);
+    set(bitboard, D6);
+    set(bitboard, F6);
+
+    set(bitboard, B4);
+    set(bitboard, G4);
+    set(bitboard, C3);
+    set(bitboard, D3);
+    set(bitboard, E3);
+
+    printBitBoard(getQueenAttacks(D4, bitboard));
+
     return 0;
 }
