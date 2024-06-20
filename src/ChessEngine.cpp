@@ -33,10 +33,28 @@ constexpr Bitboard RANK_8 = 0x00000000000000FF;
 constexpr Bitboard ALL_SET = 0xFFFFFFFFFFFFFFFF;
 
 // Bitboard macros
-#define sqr(square) (1ULL << (square))
-#define set(board, square) ((board) |= sqr(square))
-#define get(board, square) (((board) & sqr(square)) ? 1:0)
-#define clear(board, square) ((board) &= ~sqr(square))
+void init_sqr(){
+    for(int i = 0; i < 8; i++){
+        for(int j = 0; j < 8; j++){
+            std::cout << (1ULL << (i*8 + j)) << "ULL, ";
+        }
+        std::cout << std::endl;
+    }
+}
+
+//Lookup table where sqr[index] represents 1ULL << index
+Bitboard sqr[64] = {1ULL, 2ULL, 4ULL, 8ULL, 16ULL, 32ULL, 64ULL, 128ULL, 
+256ULL, 512ULL, 1024ULL, 2048ULL, 4096ULL, 8192ULL, 16384ULL, 32768ULL,
+65536ULL, 131072ULL, 262144ULL, 524288ULL, 1048576ULL, 2097152ULL, 4194304ULL, 8388608ULL,
+16777216ULL, 33554432ULL, 67108864ULL, 134217728ULL, 268435456ULL, 536870912ULL, 1073741824ULL, 2147483648ULL, 
+4294967296ULL, 8589934592ULL, 17179869184ULL, 34359738368ULL, 68719476736ULL, 137438953472ULL, 274877906944ULL, 549755813888ULL,
+1099511627776ULL, 2199023255552ULL, 4398046511104ULL, 8796093022208ULL, 17592186044416ULL, 35184372088832ULL, 70368744177664ULL, 140737488355328ULL, 
+281474976710656ULL, 562949953421312ULL, 1125899906842624ULL, 2251799813685248ULL, 4503599627370496ULL, 9007199254740992ULL, 18014398509481984ULL, 36028797018963968ULL,
+72057594037927936ULL, 144115188075855872ULL, 288230376151711744ULL, 576460752303423488ULL, 1152921504606846976ULL, 2305843009213693952ULL, 4611686018427387904ULL, 9223372036854775808ULL};
+
+#define set(board, square) ((board) |= sqr[square])
+#define get(board, square) (((board) & sqr[square]) ? 1:0)
+#define clear(board, square) ((board) &= ~sqr[square])
 
 // enum for all squares, corresponds to their position on the bitboard
 enum Square {
@@ -61,6 +79,8 @@ std::string toSquare[] = {
 "a2", "b2", "c2", "d2", "e2", "f2", "g2", "h2",
 "a1", "b1", "c1", "d1", "e1", "f1", "g1", "h1"
 };
+
+enum Direction {UP = -8, DOWN = 8, LEFT = -1, RIGHT = 1};
 
 // Enum used to track colour of pieces... etc.
 enum Colour {White, Black, Both};
@@ -656,19 +676,19 @@ class Chessboard{
     Chessboard(){
         // Init white pieces
         pieceBoards[P] = RANK_2;
-        pieceBoards[N] = sqr(B1) | sqr(G1);
-        pieceBoards[B] = sqr(C1) | sqr(F1);
-        pieceBoards[R] = sqr(A1) | sqr(H1);
-        pieceBoards[Q] = sqr(D1);
-        pieceBoards[K] = sqr(E1);
+        pieceBoards[N] = sqr[B1] | sqr[G1];
+        pieceBoards[B] = sqr[C1] | sqr[F1];
+        pieceBoards[R] = sqr[A1] | sqr[H1];
+        pieceBoards[Q] = sqr[D1];
+        pieceBoards[K] = sqr[E1];
 
         // Init black pieces
         pieceBoards[p] = RANK_7;
-        pieceBoards[n] = sqr(B8) | sqr(G8);
-        pieceBoards[b] = sqr(C8) | sqr(F8);
-        pieceBoards[r] = sqr(A8) | sqr(H8);
-        pieceBoards[q] = sqr(D8);
-        pieceBoards[k] = sqr(E8);
+        pieceBoards[n] = sqr[B8] | sqr[G8];
+        pieceBoards[b] = sqr[C8] | sqr[F8];
+        pieceBoards[r] = sqr[A8] | sqr[H8];
+        pieceBoards[q] = sqr[D8];
+        pieceBoards[k] = sqr[E8];
 
         for(int i = 0; i < 6; i++){
             occupancies[White] |= pieceBoards[i];
@@ -689,7 +709,7 @@ class Chessboard{
             if(isalpha(fen[index])){
                 int piece = charToPiece[fen[index]];
 
-                pieceBoards[piece] |= sqr(square);
+                pieceBoards[piece] |= sqr[square];
                 square++;
             }else if(isdigit(fen[index])){
                 square += (fen[index] - '0');
@@ -774,6 +794,124 @@ class Chessboard{
     inline void generateMoves(){
         // Integers representing the initial and final squares of a piece after a move
         int from, to;
+
+        Bitboard pieceBitboard, attacks;
+
+        for(int piece = P; piece <= k; piece++){
+            pieceBitboard = pieceBoards[piece];
+
+            if(side == White){
+                if(piece == P){
+                    while(pieceBitboard){
+                        from = findLSB(pieceBitboard);
+
+                        to = from + UP;
+
+                        if(to >= 0 && !get(occupancies[Both], to)){
+                            // Pawn promotion
+                            if(sqr[from] & RANK_7){
+                                std::cout << "Pawn promotion: " << toSquare[from] << toSquare[to] << "Q" << std::endl;
+                                std::cout << "Pawn promotion: " << toSquare[from] << toSquare[to] << "B" << std::endl;
+                                std::cout << "Pawn promotion: " << toSquare[from] << toSquare[to] << "N" << std::endl;
+                                std::cout << "Pawn promotion: " << toSquare[from] << toSquare[to] << "R" << std::endl;
+                            }else{
+                                // Pawn push
+                                std::cout << "Pawn push: " << toSquare[from] << toSquare[to] << std::endl;
+                                //Double pawn push
+                                if((sqr[from] & RANK_2) && !get(occupancies[Both], to + UP)){
+                                    std::cout << "Pawn double push: " << toSquare[from] << toSquare[to + UP] << std::endl;
+                                }
+                            }
+                        }
+
+                        attacks = pawn_attacks[White][from] & occupancies[Black];
+
+                        while(attacks){
+                            to = findLSB(attacks);
+
+                            if(sqr[from] & RANK_7){
+                                std::cout << "Pawn capture promotion: " << toSquare[from] << toSquare[to] << "Q" << std::endl;
+                                std::cout << "Pawn capture promotion: " << toSquare[from] << toSquare[to] << "B" << std::endl;
+                                std::cout << "Pawn capture promotion: " << toSquare[from] << toSquare[to] << "N" << std::endl;
+                                std::cout << "Pawn capture promotion: " << toSquare[from] << toSquare[to] << "R" << std::endl;
+                            }else{
+                                // Pawn push
+                                std::cout << "Pawn capture: " << toSquare[from] << toSquare[to] << std::endl;
+                            }
+
+                            clear(attacks, to);
+                        }
+
+                        if(enpassant != no_sq){
+                            Bitboard enpassant_attacks = pawn_attacks[White][from] & sqr[enpassant];
+
+                            if(enpassant_attacks){
+                                to = findLSB(enpassant_attacks);
+                                std::cout << "Pawn enpassant capture: " << toSquare[from] << toSquare[to] << std::endl;
+                            }
+                        }
+
+                        clear(pieceBitboard, from);
+                    }
+                }
+            }else{
+                if(piece == p){
+                    while(pieceBitboard){
+                        from = findLSB(pieceBitboard);
+
+                        to = from + DOWN;
+
+                        if(to >= 0 && !get(occupancies[Both], to)){
+                            // Pawn promotion
+                            if(sqr[from] & RANK_2){
+                                std::cout << "Pawn promotion: " << toSquare[from] << toSquare[to] << "Q" << std::endl;
+                                std::cout << "Pawn promotion: " << toSquare[from] << toSquare[to] << "B" << std::endl;
+                                std::cout << "Pawn promotion: " << toSquare[from] << toSquare[to] << "N" << std::endl;
+                                std::cout << "Pawn promotion: " << toSquare[from] << toSquare[to] << "R" << std::endl;
+                            }else{
+                                // Pawn push
+                                std::cout << "Pawn push: " << toSquare[from] << toSquare[to] << std::endl;
+                                //Double pawn push
+                                if((sqr[from] & RANK_7) && !get(occupancies[Both], to + DOWN)){
+                                    std::cout << "Pawn double push: " << toSquare[from] << toSquare[to + DOWN] << std::endl;
+                                }
+                            }
+                        }
+
+                        attacks = pawn_attacks[Black][from] & occupancies[White];
+
+                        while(attacks){
+                            to = findLSB(attacks);
+
+                            if(sqr[from] & RANK_2){
+                                std::cout << "Pawn capture promotion: " << toSquare[from] << toSquare[to] << "Q" << std::endl;
+                                std::cout << "Pawn capture promotion: " << toSquare[from] << toSquare[to] << "B" << std::endl;
+                                std::cout << "Pawn capture promotion: " << toSquare[from] << toSquare[to] << "N" << std::endl;
+                                std::cout << "Pawn capture promotion: " << toSquare[from] << toSquare[to] << "R" << std::endl;
+                            }else{
+                                // Pawn push
+                                std::cout << "Pawn capture: " << toSquare[from] << toSquare[to] << std::endl;
+                            }
+
+                            clear(attacks, to);
+                        }
+
+                        if(enpassant != no_sq){
+                            Bitboard enpassant_attacks = pawn_attacks[Black][from] & sqr[enpassant];
+
+                            if(enpassant_attacks){
+                                to = findLSB(enpassant_attacks);
+                                std::cout << "Pawn enpassant capture: " << toSquare[from] << toSquare[to] << std::endl;
+                            }
+                        }
+
+                        clear(pieceBitboard, from);
+                    }
+                }
+            }
+
+
+        }
     }
 
     /*----------------------------------*/
@@ -841,10 +979,10 @@ void init(){
 
 int main(){
     init();
-
-    Chessboard chessboard = Chessboard(tricky_position);
-    chessboard.printChessboard();
-    chessboard.printAttackedState(Black);
+    init_sqr();
+    // Chessboard chessboard = Chessboard("r3k2r/p1ppqpb1/bn2pnp1/3PN3/Pp2P3/2N2Q1p/1PPBBPpP/R3K2R b KQkq a3 0 1 ");
+    // chessboard.printChessboard();
+    // chessboard.generateMoves();
 
     return 0;
 }
