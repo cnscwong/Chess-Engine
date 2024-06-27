@@ -53,7 +53,7 @@ Bitboard sqr[64] = {1ULL, 2ULL, 4ULL, 8ULL, 16ULL, 32ULL, 64ULL, 128ULL,
 72057594037927936ULL, 144115188075855872ULL, 288230376151711744ULL, 576460752303423488ULL, 1152921504606846976ULL, 2305843009213693952ULL, 4611686018427387904ULL, 9223372036854775808ULL};
 
 #define set(board, square) ((board) |= sqr[square])
-#define get(board, square) (((board) & sqr[square]) ? 1:0)
+#define getSquare(board, square) (((board) & sqr[square]) ? 1:0)
 #define clear(board, square) ((board) &= ~sqr[square])
 
 // enum for all squares, corresponds to their position on the bitboard
@@ -84,6 +84,11 @@ enum Direction {UP = -8, DOWN = 8, LEFT = -1, RIGHT = 1};
 
 // Enum used to track colour of pieces... etc.
 enum Colour {White, Black, Both};
+
+// returns enemy side
+inline int getEnemy(int side){
+    return (side == White) ? Black:White;
+}
 
 // Enum used to track piece type, capitalized represents white
 enum Pieces {P, N, B, R, Q, K, p, n, b, r, q, k, numPieces};
@@ -133,12 +138,12 @@ void printBitBoard(Bitboard board){
     for(int rank = 0; rank < 8; rank++){
         std::cout << 8 - rank << "   ";
         for(int file = 0; file < 8; file++){
-            std::cout << get(board, (rank*8 + file)) << " ";
+            std::cout << getSquare(board, (rank*8 + file)) << " ";
         }
         std::cout << std::endl;
     }
     std::cout << std::endl;
-    std::cout << "    A B C D E F G H" << std::endl << std::endl << "ULL:" << board << std::endl << std::endl;
+    std::cout << "    A B C D E F G H\n\nULL:" << board << std::endl << std::endl;
 }
 
 /*----------------------------------*/
@@ -208,22 +213,22 @@ Bitboard genBishopMoves(int square, Bitboard boardState){
 
     for(i = sRank + 1, j = sFile + 1; i <= 7 && j <= 7; i++, j++){
         set(moves, (i*8 + j));
-        if(get(boardState, (i*8 + j))) break;
+        if(getSquare(boardState, (i*8 + j))) break;
     }
 
     for(i = sRank - 1, j = sFile - 1; i >= 0 && j >= 0; i--, j--){
         set(moves, (i*8 + j));
-        if(get(boardState, (i*8 + j))) break;
+        if(getSquare(boardState, (i*8 + j))) break;
     }
 
     for(i = sRank + 1, j = sFile - 1; i <= 7 && j >= 0; i++, j--){
         set(moves, (i*8 + j));
-        if(get(boardState, (i*8 + j))) break;
+        if(getSquare(boardState, (i*8 + j))) break;
     }
 
     for(i = sRank - 1, j = sFile + 1; i >= 0 && j <= 7; i--, j++){
         set(moves, (i*8 + j));
-        if(get(boardState, (i*8 + j))) break;
+        if(getSquare(boardState, (i*8 + j))) break;
     }
 
     return moves;
@@ -278,22 +283,22 @@ Bitboard genRookMoves(int square, Bitboard boardState){
 
     for(i = sRank + 1; i <= 7; i++){
         set(moves, (i*8 + sFile));
-        if(get(boardState, (i*8 + sFile))) break;
+        if(getSquare(boardState, (i*8 + sFile))) break;
     }
 
     for(i = sRank - 1; i >= 0; i--){
         set(moves, (i*8 + sFile));
-        if(get(boardState, (i*8 + sFile))) break;
+        if(getSquare(boardState, (i*8 + sFile))) break;
     }
 
     for(j = sFile + 1;j <= 7; j++){
         set(moves, (sRank*8 + j));
-        if(get(boardState, (sRank*8 + j))) break;
+        if(getSquare(boardState, (sRank*8 + j))) break;
     }
 
     for(j = sFile - 1;j >= 0; j--){
         set(moves, (sRank*8 + j));
-        if(get(boardState, (sRank*8 + j))) break;
+        if(getSquare(boardState, (sRank*8 + j))) break;
     }
 
     return moves;
@@ -525,13 +530,13 @@ Bitboard find_magic(int square, int bits, int isBishop){
 
 void init_magic_numbers(){
     for(int square = 0; square < 64; square++){
-        std::cout << "0x" << std::hex << find_magic(square, rookMaskBitcount[square], rook) << "ULL," << std::endl;
+        std::cout << "0x" << std::hex << find_magic(square, rookMaskBitcount[square], rook) << "ULL,\n";
     }
 
     std::cout << std::endl << std::endl;
 
     for(int square = 0; square < 64; square++){
-        std::cout << "0x" << std::hex << find_magic(square, bishopMaskBitcount[square], bishop) << "ULL," << std::endl;
+        std::cout << "0x" << std::hex << find_magic(square, bishopMaskBitcount[square], bishop) << "ULL,\n";
     }
 }
 
@@ -657,6 +662,78 @@ static inline Bitboard getRookAttacks(int square, Bitboard occupancy){
 static inline Bitboard getQueenAttacks(int square, Bitboard occupancy){
     return getBishopAttacks(square, occupancy) | getRookAttacks(square, occupancy);
 }
+
+/*----------------------------------*/
+/*       MOVES REPRESENTATION       */
+/*----------------------------------*/
+
+enum moveFlags {QUIET = 0, CAPTURE = 1, DOUBLE_PUSH = 2, ENPASSANT = 4, CASTLE = 8};
+std::map<int, char> piecePromotion = {{N, 'n'}, {B, 'b'}, {R, 'r'}, {Q, 'q'}, {n, 'n'}, {b, 'b'}, {r, 'r'}, {q, 'q'}};
+
+class Move{
+    public:
+    // Squares involving the move
+    int from, to;
+
+    // Indicates what piece is being moved or what piece the pawn is being promoted to
+    int piece, promotedPiece;
+
+    int flags;
+
+    Move(){
+        from = 0;
+        to = 0;
+        piece = 0;
+        promotedPiece = 0;
+        flags = 0;
+    }
+
+    Move(int from, int to, int piece, int promotedPiece, int flags){
+        this->from = from;
+        this->to = to;
+        this->piece = piece;
+        this->promotedPiece = promotedPiece;
+        this->flags = flags;
+    }
+
+    void print(){
+        std::cout << toSquare[from] << toSquare[to] << piecePromotion[promotedPiece] << std::endl;
+    }
+};
+
+class MoveList{
+    public:
+    Move moves[256];
+    int count = 0;
+
+    MoveList(){
+        count = 0;
+    }
+
+    void print(){
+        if(count == 0){
+            std::cout << "Move list empty\n\n";
+            return;
+        }
+
+        std::cout << "move\tpiece\tcapture\t  double    enpass\tcastle\n\n";
+        for(int i = 0; i < count; i++){
+            Move temp = moves[i];
+
+            std::cout << toSquare[temp.from] << toSquare[temp.to] << piecePromotion[temp.promotedPiece] << \
+            "\t" << pieceToChar[temp.piece] << "\t" << ((temp.flags & CAPTURE) ? 1:0) << \
+            "\t  " << ((temp.flags & DOUBLE_PUSH) ? 1:0) << "         " << \
+            ((temp.flags & ENPASSANT) ? 1:0) << "\t\t" << ((temp.flags & CASTLE) ? 1:0) << std::endl;
+        }
+
+        std::cout << "\n\nTotal moves: " << count << std::endl << std::endl;
+    }
+
+    inline void addMove(Move move){
+        moves[count] = move;
+        count++;
+    }
+};
 
 /*----------------------------------*/
 /*       BOARD REPRESENTATION       */
@@ -791,9 +868,11 @@ class Chessboard{
         return false;
     }
 
-    inline void generateMoves(){
+    inline void generateMoves(MoveList &move_list){
+        move_list.count = 0;
         // Integers representing the initial and final squares of a piece after a move
         int from, to;
+        bool canPromote;
 
         Bitboard pieceBitboard, attacks;
 
@@ -804,22 +883,22 @@ class Chessboard{
                 if(piece == P){
                     while(pieceBitboard){
                         from = findLSB(pieceBitboard);
-
+                        canPromote = sqr[from] & RANK_7;
                         to = from + UP;
 
-                        if(to >= 0 && !get(occupancies[Both], to)){
+                        if(to >= 0 && !getSquare(occupancies[Both], to)){
                             // Pawn promotion
-                            if(sqr[from] & RANK_7){
-                                std::cout << "Pawn promotion: " << toSquare[from] << toSquare[to] << "Q" << std::endl;
-                                std::cout << "Pawn promotion: " << toSquare[from] << toSquare[to] << "B" << std::endl;
-                                std::cout << "Pawn promotion: " << toSquare[from] << toSquare[to] << "N" << std::endl;
-                                std::cout << "Pawn promotion: " << toSquare[from] << toSquare[to] << "R" << std::endl;
+                            if(canPromote){
+                                move_list.addMove(Move(from, to, piece, Q, 0));
+                                move_list.addMove(Move(from, to, piece, B, 0));
+                                move_list.addMove(Move(from, to, piece, N, 0));
+                                move_list.addMove(Move(from, to, piece, R, 0));
                             }else{
                                 // Pawn push
-                                std::cout << "Pawn push: " << toSquare[from] << toSquare[to] << std::endl;
+                                move_list.addMove(Move(from, to, piece, 0, 0));
                                 //Double pawn push
-                                if((sqr[from] & RANK_2) && !get(occupancies[Both], to + UP)){
-                                    std::cout << "Pawn double push: " << toSquare[from] << toSquare[to + UP] << std::endl;
+                                if((sqr[from] & RANK_2) && !getSquare(occupancies[Both], to + UP)){
+                                    move_list.addMove(Move(from, to + UP, piece, 0, DOUBLE_PUSH));
                                 }
                             }
                         }
@@ -829,14 +908,14 @@ class Chessboard{
                         while(attacks){
                             to = findLSB(attacks);
 
-                            if(sqr[from] & RANK_7){
-                                std::cout << "Pawn capture promotion: " << toSquare[from] << toSquare[to] << "Q" << std::endl;
-                                std::cout << "Pawn capture promotion: " << toSquare[from] << toSquare[to] << "B" << std::endl;
-                                std::cout << "Pawn capture promotion: " << toSquare[from] << toSquare[to] << "N" << std::endl;
-                                std::cout << "Pawn capture promotion: " << toSquare[from] << toSquare[to] << "R" << std::endl;
+                            if(canPromote){
+                                move_list.addMove(Move(from, to, piece, Q, CAPTURE));
+                                move_list.addMove(Move(from, to, piece, B, CAPTURE));
+                                move_list.addMove(Move(from, to, piece, N, CAPTURE));
+                                move_list.addMove(Move(from, to, piece, R, CAPTURE));
                             }else{
                                 // Pawn push
-                                std::cout << "Pawn capture: " << toSquare[from] << toSquare[to] << std::endl;
+                                move_list.addMove(Move(from, to, piece, 0, CAPTURE));
                             }
 
                             clear(attacks, to);
@@ -847,33 +926,52 @@ class Chessboard{
 
                             if(enpassant_attacks){
                                 to = findLSB(enpassant_attacks);
-                                std::cout << "Pawn enpassant capture: " << toSquare[from] << toSquare[to] << std::endl;
+                                move_list.addMove(Move(from, to, piece, 0, CAPTURE | ENPASSANT));
                             }
                         }
 
                         clear(pieceBitboard, from);
                     }
                 }
+            
+                if(piece == K){
+                    if(castle & wKingside){
+                        if(!getSquare(occupancies[Both], F1) && !getSquare(occupancies[Both], G1)){
+                            if(!this->isAttacked(E1, Black) && !this->isAttacked(F1, Black)){
+                                move_list.addMove(Move(E1, G1, piece, 0, CASTLE));
+                            }
+                        }
+                    }
+
+                    if(castle & wQueenside){
+                        if(!getSquare(occupancies[Both], B1) && !getSquare(occupancies[Both], C1) && !getSquare(occupancies[Both], D1)){
+                            if(!this->isAttacked(D1, Black) && !this->isAttacked(E1, Black)){
+                                move_list.addMove(Move(E1, C1, piece, 0, CASTLE));
+                            }
+                        }
+                    }
+                }
             }else{
                 if(piece == p){
                     while(pieceBitboard){
                         from = findLSB(pieceBitboard);
+                        canPromote = sqr[from] & RANK_2;
 
                         to = from + DOWN;
 
-                        if(to >= 0 && !get(occupancies[Both], to)){
+                        if(to >= 0 && !getSquare(occupancies[Both], to)){
                             // Pawn promotion
-                            if(sqr[from] & RANK_2){
-                                std::cout << "Pawn promotion: " << toSquare[from] << toSquare[to] << "Q" << std::endl;
-                                std::cout << "Pawn promotion: " << toSquare[from] << toSquare[to] << "B" << std::endl;
-                                std::cout << "Pawn promotion: " << toSquare[from] << toSquare[to] << "N" << std::endl;
-                                std::cout << "Pawn promotion: " << toSquare[from] << toSquare[to] << "R" << std::endl;
+                            if(canPromote){
+                                move_list.addMove(Move(from, to, piece, q, 0));
+                                move_list.addMove(Move(from, to, piece, b, 0));
+                                move_list.addMove(Move(from, to, piece, n, 0));
+                                move_list.addMove(Move(from, to, piece, r, 0));
                             }else{
                                 // Pawn push
-                                std::cout << "Pawn push: " << toSquare[from] << toSquare[to] << std::endl;
+                                move_list.addMove(Move(from, to, piece, 0, 0));
                                 //Double pawn push
-                                if((sqr[from] & RANK_7) && !get(occupancies[Both], to + DOWN)){
-                                    std::cout << "Pawn double push: " << toSquare[from] << toSquare[to + DOWN] << std::endl;
+                                if((sqr[from] & RANK_7) && !getSquare(occupancies[Both], to + DOWN)){
+                                    move_list.addMove(Move(from, to + DOWN, piece, 0, DOUBLE_PUSH));
                                 }
                             }
                         }
@@ -883,14 +981,14 @@ class Chessboard{
                         while(attacks){
                             to = findLSB(attacks);
 
-                            if(sqr[from] & RANK_2){
-                                std::cout << "Pawn capture promotion: " << toSquare[from] << toSquare[to] << "Q" << std::endl;
-                                std::cout << "Pawn capture promotion: " << toSquare[from] << toSquare[to] << "B" << std::endl;
-                                std::cout << "Pawn capture promotion: " << toSquare[from] << toSquare[to] << "N" << std::endl;
-                                std::cout << "Pawn capture promotion: " << toSquare[from] << toSquare[to] << "R" << std::endl;
+                            if(canPromote){
+                                move_list.addMove(Move(from, to, piece, q, CAPTURE));
+                                move_list.addMove(Move(from, to, piece, b, CAPTURE));
+                                move_list.addMove(Move(from, to, piece, n, CAPTURE));
+                                move_list.addMove(Move(from, to, piece, r, CAPTURE));
                             }else{
                                 // Pawn push
-                                std::cout << "Pawn capture: " << toSquare[from] << toSquare[to] << std::endl;
+                                move_list.addMove(Move(from, to, piece, 0, CAPTURE));
                             }
 
                             clear(attacks, to);
@@ -901,21 +999,152 @@ class Chessboard{
 
                             if(enpassant_attacks){
                                 to = findLSB(enpassant_attacks);
-                                std::cout << "Pawn enpassant capture: " << toSquare[from] << toSquare[to] << std::endl;
+                                move_list.addMove(Move(from, to, piece, 0, CAPTURE | ENPASSANT));
                             }
                         }
 
                         clear(pieceBitboard, from);
                     }
                 }
+
+                if(piece == k){
+                    if(castle & bKingside){
+                        if(!getSquare(occupancies[Both], F8) && !getSquare(occupancies[Both], G8)){
+                            if(!this->isAttacked(E8, White) && !this->isAttacked(F8, White)){
+                                move_list.addMove(Move(E8, G8, piece, 0, CASTLE));
+                            }
+                        }
+                    }
+
+                    if(castle & bQueenside){
+                        if(!getSquare(occupancies[Both], B8) && !getSquare(occupancies[Both], C8) && !getSquare(occupancies[Both], D8)){
+                            if(!this->isAttacked(D8, White) && !this->isAttacked(E8, White)){
+                                move_list.addMove(Move(E8, C8, piece, 0, CASTLE));
+                            }
+                        }
+                    }
+                }
             }
 
+            // Generate knight moves
+            if(side == White ? piece == N:piece == n){
+                while(pieceBitboard){
+                    from = findLSB(pieceBitboard);
+                    
+                    attacks = knight_attacks[from] & ~occupancies[side];
 
+                    while(attacks){
+                        to = findLSB(attacks);
+
+                        if(!getSquare(occupancies[getEnemy(side)], to)){
+                            move_list.addMove(Move(from, to, piece, 0, 0));
+                        }else{
+                            move_list.addMove(Move(from, to, piece, 0, CAPTURE));
+                        }
+
+                        clear(attacks, to);
+                    }
+
+                    clear(pieceBitboard, from);
+                }
+            }
+
+            // Generate bishop moves
+            if(side == White ? piece == B:piece == b){
+                while(pieceBitboard){
+                    from = findLSB(pieceBitboard);
+                    
+                    attacks = getBishopAttacks(from, occupancies[Both]) & ~occupancies[side];
+
+                    while(attacks){
+                        to = findLSB(attacks);
+
+                        if(!getSquare(occupancies[getEnemy(side)], to)){
+                            move_list.addMove(Move(from, to, piece, 0, 0));
+                        }else{
+                            move_list.addMove(Move(from, to, piece, 0, CAPTURE));
+                        }
+
+                        clear(attacks, to);
+                    }
+
+                    clear(pieceBitboard, from);
+                }
+            }
+
+            // Generate rook moves
+            if(side == White ? piece == R:piece == r){
+                while(pieceBitboard){
+                    from = findLSB(pieceBitboard);
+                    
+                    attacks = getRookAttacks(from, occupancies[Both]) & ~occupancies[side];
+
+                    while(attacks){
+                        to = findLSB(attacks);
+
+                        if(!getSquare(occupancies[getEnemy(side)], to)){
+                            move_list.addMove(Move(from, to, piece, 0, 0));
+                        }else{
+                            move_list.addMove(Move(from, to, piece, 0, CAPTURE));
+                        }
+
+                        clear(attacks, to);
+                    }
+
+                    clear(pieceBitboard, from);
+                }
+            }
+
+            // Generate queen moves
+            if(side == White ? piece == Q:piece == q){
+                while(pieceBitboard){
+                    from = findLSB(pieceBitboard);
+                    
+                    attacks = getQueenAttacks(from, occupancies[Both]) & ~occupancies[side];
+
+                    while(attacks){
+                        to = findLSB(attacks);
+
+                        if(!getSquare(occupancies[getEnemy(side)], to)){
+                            move_list.addMove(Move(from, to, piece, 0, 0));
+                        }else{
+                            move_list.addMove(Move(from, to, piece, 0, CAPTURE));
+                        }
+
+                        clear(attacks, to);
+                    }
+
+                    clear(pieceBitboard, from);
+                }
+            }
+
+            // Generate king moves
+            if(side == White ? piece == K:piece == k){
+                while(pieceBitboard){
+                    from = findLSB(pieceBitboard);
+                    
+                    attacks = king_attacks[from] & ~occupancies[side];
+
+                    while(attacks){
+                        to = findLSB(attacks);
+
+                        if(!getSquare(occupancies[getEnemy(side)], to)){
+                            move_list.addMove(Move(from, to, piece, 0, 0));
+                        }else{
+                            move_list.addMove(Move(from, to, piece, 0, CAPTURE));
+                        }
+
+                        clear(attacks, to);
+                    }
+
+                    clear(pieceBitboard, from);
+                }
+            }
         }
     }
 
     /*----------------------------------*/
-    /*            BOARD DEBUG           */
+    /*          CHESSBOARD DEBUG        */
     /*----------------------------------*/
 
     void printAttackedState(int side){
@@ -928,8 +1157,7 @@ class Chessboard{
             }
             std::cout << std::endl;
         }
-        std::cout << std::endl;
-        std::cout << "    A B C D E F G H" << std::endl << std::endl;
+        std::cout << "\n    A B C D E F G H\n\n";
     }
 
     // debug print function
@@ -941,7 +1169,7 @@ class Chessboard{
                 int piece = -1;
                 
                 for(int i = P; i < numPieces; i++){
-                    if(get(pieceBoards[i], square)){
+                    if(getSquare(pieceBoards[i], square)){
                         piece = i;
                         break;
                     }
@@ -955,8 +1183,7 @@ class Chessboard{
             }
             std::cout << std::endl;
         }
-        std::cout << std::endl;
-        std::cout << "    A B C D E F G H" << std::endl << std::endl;
+        std::cout << "\n    A B C D E F G H\n\n";
         std::cout << "Side: " << (side ? "Black":"White") << std::endl;
         std::cout << "En Passant: " << (enpassant != no_sq ? toSquare[enpassant]:"None") << std::endl;
         std::cout << "Castling: " << (castle & wKingside ? "WK":"-") << ", " << (castle & wQueenside ? "WQ":"-") << ", " << (castle & bKingside ? "BK":"-") << ", " << (castle & bQueenside ? "BQ":"-") << std::endl << std::endl << std::endl;
@@ -969,7 +1196,6 @@ class Chessboard{
 
 void init(){
     initLeaperAttacks();
-
     initSliderAttacks();
 }
 
@@ -979,10 +1205,13 @@ void init(){
 
 int main(){
     init();
-    init_sqr();
-    // Chessboard chessboard = Chessboard("r3k2r/p1ppqpb1/bn2pnp1/3PN3/Pp2P3/2N2Q1p/1PPBBPpP/R3K2R b KQkq a3 0 1 ");
-    // chessboard.printChessboard();
-    // chessboard.generateMoves();
+
+    Chessboard chessboard = Chessboard(tricky_position);
+    chessboard.printChessboard();
+    MoveList move_list;
+    chessboard.generateMoves(move_list);
+
+    move_list.print();
 
     return 0;
 }
