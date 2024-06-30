@@ -3,6 +3,7 @@
 #include <string>
 #include <cstring>
 #include <map>
+#include <windows.h>
 
 /*----------------------------------*/
 /*             Bitboard             */
@@ -100,7 +101,7 @@ const std::string pieceToChar = "PNBRQKpnbrqk";
 std::map<char, int> charToPiece = {{'P', P}, {'N', N}, {'B', B}, {'R', R}, {'Q', Q}, {'K', K}, {'p', p}, {'n', n}, {'b', b}, {'r', r}, {'q', q}, {'k', k}};
 
 // Enum for castling rights
-enum Castling {wKingside = 1, wQueenside = 2, bKingside = 4, bQueenside = 8};
+enum Castling {wKingside = 1, wQueenside = 2, bKingside = 4, bQueenside = 8, ALL_CASTLE_SET = 15};
 
 // FEN debug positions
 #define empty_board "8/8/8/8/8/8/8/8 w - - "
@@ -746,7 +747,7 @@ class Chessboard{
     //White, Black, and all occupancies
     Bitboard occupancies[3] = {0};
     
-    Colour side = White;
+    int side = White;
     int enpassant = no_sq;
     int castle = 0;
 
@@ -1191,6 +1192,146 @@ class Chessboard{
 };
 
 /*----------------------------------*/
+/*           MAKING MOVES           */
+/*----------------------------------*/
+
+enum { all, captures};
+
+const int castling_rights[64] = {
+     7, 15, 15, 15,  3, 15, 15, 11, 
+    15, 15, 15, 15, 15, 15, 15, 15,
+    15, 15, 15, 15, 15, 15, 15, 15,
+    15, 15, 15, 15, 15, 15, 15, 15, 
+    15, 15, 15, 15, 15, 15, 15, 15,
+    15, 15, 15, 15, 15, 15, 15, 15,
+    15, 15, 15, 15, 15, 15, 15, 15,
+    13, 15, 15, 15, 12, 15, 15, 14,
+};
+
+class BoardContainer{
+    public:
+    Chessboard board;
+    Chessboard copy;
+
+    BoardContainer(){
+        board = Chessboard();
+        copy = Chessboard();
+    }
+
+    BoardContainer(std::string fen){
+        board = Chessboard(fen);
+        copy = Chessboard(fen);
+    }
+
+
+    inline void saveBoard(){
+        copy = board;
+    }
+
+    inline void restoreBoard(){
+        board = copy;
+    }
+
+    inline int makeMove(Move move, int moveFlag){
+        bool isWhite = board.side == White;
+
+        if(moveFlag == all){
+            this->saveBoard();
+
+            clear(board.pieceBoards[move.piece], move.from);
+            set(board.pieceBoards[move.piece], move.to);
+            clear(board.occupancies[board.side], move.from);
+            set(board.occupancies[board.side], move.to);
+
+            if(move.flags & CAPTURE){
+                int startInd, endInd;
+                if(isWhite){
+                    startInd = p;
+                    endInd = k;
+                }else{
+                    startInd = P;
+                    endInd = K;
+                }
+
+                for(int piece = startInd; piece <= endInd; piece++){
+                    if(getSquare(board.pieceBoards[piece], move.to)){
+                        clear(board.pieceBoards[piece], move.to);
+                        break;
+                    }
+                }
+
+                clear(board.occupancies[getEnemy(board.side)], move.to);
+            }
+
+            if(move.promotedPiece){
+                clear(board.pieceBoards[(isWhite) ? P:p], move.to);
+                set(board.pieceBoards[move.promotedPiece], move.to);
+            }
+
+            if(move.flags & ENPASSANT){
+                (isWhite) ? clear(board.pieceBoards[p], move.to + DOWN):clear(board.pieceBoards[P], move.to + UP);
+                (isWhite) ? clear(board.occupancies[Black], move.to + DOWN):clear(board.occupancies[White], move.to + UP);
+            }
+
+            board.enpassant = no_sq;
+
+            if(move.flags & DOUBLE_PUSH){
+                (isWhite) ? (board.enpassant = move.to + DOWN):(board.enpassant = move.to + UP);
+            }
+
+            if(move.flags & CASTLE){
+                switch(move.to){
+                    case(G1):
+                        clear(board.pieceBoards[R], H1);
+                        set(board.pieceBoards[R], F1);
+                        clear(board.occupancies[board.side], H1);
+                        set(board.occupancies[board.side], F1);
+                        break;
+                    case(C1):
+                        clear(board.pieceBoards[R], A1);
+                        set(board.pieceBoards[R], D1);
+                        clear(board.occupancies[board.side], A1);
+                        set(board.occupancies[board.side], D1);
+                        break;
+                    case(G8):
+                        clear(board.pieceBoards[r], H8);
+                        set(board.pieceBoards[r], F8);
+                        clear(board.occupancies[board.side], H8);
+                        set(board.occupancies[board.side], F8);
+                        break;
+                    case(C8):
+                        clear(board.pieceBoards[r], A8);
+                        set(board.pieceBoards[r], D8);
+                        clear(board.occupancies[board.side], A8);
+                        set(board.occupancies[board.side], D8);
+                        break;
+                }
+            }
+
+            board.castle &= castling_rights[move.from];
+
+            board.occupancies[Both] = board.occupancies[White] | board.occupancies[Black];
+
+            board.side = getEnemy(board.side);
+
+            if(board.isAttacked(!isWhite ? findLSB(board.pieceBoards[k]):findLSB(board.pieceBoards[K]), board.side)){
+                this->restoreBoard();
+
+                return 0;
+            }else{
+                return 1;
+            }
+        }else{
+            if(move.flags & CAPTURE){
+                makeMove(move, all);
+            }else{
+                return 0;
+            }
+        }
+    }
+};
+
+/*----------------------------------*/
 /*          INITIALIZATION          */
 /*----------------------------------*/
 
@@ -1200,18 +1341,40 @@ void init(){
 }
 
 /*----------------------------------*/
+/*          PERFT TESTING           */
+/*----------------------------------*/
+
+int get_time_ms(){
+    return GetTickCount();
+}
+
+/*----------------------------------*/
 /*               MAIN               */
 /*----------------------------------*/
 
 int main(){
     init();
 
-    Chessboard chessboard = Chessboard(tricky_position);
-    chessboard.printChessboard();
-    MoveList move_list;
-    chessboard.generateMoves(move_list);
+    int start_time = get_time_ms();
 
-    move_list.print();
+    BoardContainer boards = BoardContainer("r3k2r/p1ppRpb1/1n2pnp1/3PN3/1p2P3/2N2Q1p/PPPBqPPP/R3K2R b KQkq - 0 1 ");
+    MoveList move_list;
+
+    boards.board.generateMoves(move_list);
+
+    for(int moveIndex = 0; moveIndex < move_list.count; moveIndex++){
+        Move move = move_list.moves[moveIndex];
+        char temp;
+        if(!boards.makeMove(move, all)){
+            continue;
+        }
+        boards.board.printChessboard();
+        boards.restoreBoard();
+        boards.board.printChessboard();
+        std::cin >> temp;
+    }
+
+    std::cout << "Time taken: " << get_time_ms() - start_time;
 
     return 0;
 }
