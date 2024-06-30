@@ -1309,6 +1309,7 @@ class BoardContainer{
             }
 
             board.castle &= castling_rights[move.from];
+            board.castle &= castling_rights[move.to];
 
             board.occupancies[Both] = board.occupancies[White] | board.occupancies[Black];
 
@@ -1341,11 +1342,36 @@ void init(){
 }
 
 /*----------------------------------*/
-/*          PERFT TESTING           */
+/*           PERF TESTING           */
 /*----------------------------------*/
 
 int get_time_ms(){
     return GetTickCount();
+}
+
+long node_count = 0;
+
+static inline void perftDriver(int depth, BoardContainer boards){
+    if(depth == 0){
+        node_count++;
+        return;
+    }
+
+    MoveList move_list;
+
+    boards.board.generateMoves(move_list);
+
+    for(int moveIndex = 0; moveIndex < move_list.count; moveIndex++){
+        boards.saveBoard();
+
+        if(!boards.makeMove(move_list.moves[moveIndex], all)){
+            continue;
+        }
+
+        perftDriver(depth - 1, boards);
+
+        boards.restoreBoard();
+    }
 }
 
 /*----------------------------------*/
@@ -1356,25 +1382,11 @@ int main(){
     init();
 
     int start_time = get_time_ms();
+    BoardContainer boards = BoardContainer(start_position);
+    perftDriver(6, boards);
 
-    BoardContainer boards = BoardContainer("r3k2r/p1ppRpb1/1n2pnp1/3PN3/1p2P3/2N2Q1p/PPPBqPPP/R3K2R b KQkq - 0 1 ");
-    MoveList move_list;
-
-    boards.board.generateMoves(move_list);
-
-    for(int moveIndex = 0; moveIndex < move_list.count; moveIndex++){
-        Move move = move_list.moves[moveIndex];
-        char temp;
-        if(!boards.makeMove(move, all)){
-            continue;
-        }
-        boards.board.printChessboard();
-        boards.restoreBoard();
-        boards.board.printChessboard();
-        std::cin >> temp;
-    }
-
-    std::cout << "Time taken: " << get_time_ms() - start_time;
+    std::cout << "Time taken: " << get_time_ms() - start_time << std::endl;
+    std::cout << "Nodes: " << node_count;
 
     return 0;
 }
