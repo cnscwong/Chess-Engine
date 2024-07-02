@@ -4,6 +4,7 @@
 #include <cstring>
 #include <map>
 #include <windows.h>
+#include <assert.h>
 
 /*----------------------------------*/
 /*             Bitboard             */
@@ -1324,7 +1325,7 @@ class BoardContainer{
             }
         }else{
             if(move.flags & CAPTURE){
-                makeMove(move, all);
+                return makeMove(move, all);
             }else{
                 return 0;
             }
@@ -1342,18 +1343,20 @@ void init(){
 }
 
 /*----------------------------------*/
-/*           PERF TESTING           */
+/*        PERFORMANCE TESTING       */
 /*----------------------------------*/
 
 int get_time_ms(){
     return GetTickCount();
 }
 
-long node_count = 0;
+const int perftDepth = 5;
+long node_count[perftDepth + 1] = {0};
+
 
 static inline void perftDriver(int depth, BoardContainer boards){
+    node_count[depth]++;
     if(depth == 0){
-        node_count++;
         return;
     }
 
@@ -1374,6 +1377,42 @@ static inline void perftDriver(int depth, BoardContainer boards){
     }
 }
 
+void moveGenBugCheck(){
+    BoardContainer startPos = BoardContainer(start_position);
+
+    perftDriver(perftDepth, startPos);
+    assert(node_count[0] == 4865609);
+    assert(node_count[1] == 197281);
+    assert(node_count[2] == 8902);
+    assert(node_count[3] == 400);
+    assert(node_count[4] == 20);
+    assert(node_count[5] == 1);
+
+    memset(node_count, 0, sizeof(node_count));
+
+    BoardContainer trickyPos = BoardContainer(tricky_position);
+
+    perftDriver(perftDepth, trickyPos);
+    assert(node_count[0] == 193690690);
+    assert(node_count[1] == 4085603);
+    assert(node_count[2] == 97862);
+    assert(node_count[3] == 2039);
+    assert(node_count[4] == 48);
+    assert(node_count[5] == 1);
+    std::cout << "Passed! Move Generator is bug free!\n\n";
+}
+
+void moveGenAverageTime(std::string fenPos){
+    BoardContainer position = BoardContainer(fenPos);
+    int total_time = get_time_ms();
+    for(int i = 0; i < 5; i++){
+        int start_time = get_time_ms();
+        perftDriver(perftDepth, position);
+        std::cout << "Time " << i << ": " << get_time_ms() - start_time << std::endl;
+    }
+    std::cout << "Average time: " << (get_time_ms() - total_time)/5.0 << std::endl;
+}
+
 /*----------------------------------*/
 /*               MAIN               */
 /*----------------------------------*/
@@ -1381,12 +1420,13 @@ static inline void perftDriver(int depth, BoardContainer boards){
 int main(){
     init();
 
-    int start_time = get_time_ms();
-    BoardContainer boards = BoardContainer(start_position);
-    perftDriver(6, boards);
+    moveGenAverageTime();
+    // int start_time = get_time_ms();
+    // BoardContainer boards = BoardContainer(tricky_position);
+    // perftDriver(5, boards);
 
-    std::cout << "Time taken: " << get_time_ms() - start_time << std::endl;
-    std::cout << "Nodes: " << node_count;
+    // std::cout << "Time taken: " << get_time_ms() - start_time << std::endl;
+    // std::cout << "Nodes: " << node_count;
 
     return 0;
 }
