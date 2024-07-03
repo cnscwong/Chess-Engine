@@ -34,7 +34,6 @@ constexpr Bitboard RANK_8 = 0x00000000000000FF;
 
 constexpr Bitboard ALL_SET = 0xFFFFFFFFFFFFFFFF;
 
-// Bitboard macros
 void init_sqr(){
     for(int i = 0; i < 8; i++){
         for(int j = 0; j < 8; j++){
@@ -54,6 +53,7 @@ Bitboard sqr[64] = {1ULL, 2ULL, 4ULL, 8ULL, 16ULL, 32ULL, 64ULL, 128ULL,
 281474976710656ULL, 562949953421312ULL, 1125899906842624ULL, 2251799813685248ULL, 4503599627370496ULL, 9007199254740992ULL, 18014398509481984ULL, 36028797018963968ULL,
 72057594037927936ULL, 144115188075855872ULL, 288230376151711744ULL, 576460752303423488ULL, 1152921504606846976ULL, 2305843009213693952ULL, 4611686018427387904ULL, 9223372036854775808ULL};
 
+// Bitboard macros
 #define set(board, square) ((board) |= sqr[square])
 #define getSquare(board, square) (((board) & sqr[square]) ? 1:0)
 #define clear(board, square) ((board) &= ~sqr[square])
@@ -71,6 +71,7 @@ enum Square {
     numSquares, no_sq
 };
 
+// Lookup table for square to string representation
 std::string toSquare[] = {
 "a8", "b8", "c8", "d8", "e8", "f8", "g8", "h8",
 "a7", "b7", "c7", "d7", "e7", "f7", "g7", "h7",
@@ -82,6 +83,7 @@ std::string toSquare[] = {
 "a1", "b1", "c1", "d1", "e1", "f1", "g1", "h1"
 };
 
+// Enum for adding a number to a square to move in a certain direction
 enum Direction {UP = -8, DOWN = 8, LEFT = -1, RIGHT = 1};
 
 // Enum used to track colour of pieces... etc.
@@ -89,7 +91,7 @@ enum Colour {White, Black, Both};
 
 // returns enemy side
 inline int getEnemy(int side){
-    return (side == White) ? Black:White;
+    return side^1;
 }
 
 // Enum used to track piece type, capitalized represents white
@@ -1377,6 +1379,39 @@ static inline void perftDriver(int depth, BoardContainer boards){
     }
 }
 
+void perftTest(int depth, BoardContainer boards){
+    std::cout << "Performance Test\n\n";
+
+    MoveList move_list;
+
+    boards.board.generateMoves(move_list);
+
+    long start_time = get_time_ms();
+
+    for(int moveIndex = 0; moveIndex < move_list.count; moveIndex++){
+        boards.saveBoard();
+
+        if(!boards.makeMove(move_list.moves[moveIndex], all)){
+            continue;
+        }
+
+        long old_nodes = node_count[0];
+
+        perftDriver(depth - 1, boards);
+
+        long nodesPerDriver = node_count[0] - old_nodes;
+
+        boards.restoreBoard();
+
+        std::cout << "Move: " << toSquare[move_list.moves[moveIndex].from] << toSquare[move_list.moves[moveIndex].to] << 
+        piecePromotion[move_list.moves[moveIndex].promotedPiece] << "   Nodes: " << nodesPerDriver << std::endl;
+    }
+
+    std::cout << "\nDepth: " << depth << std::endl;
+    std::cout << "Nodes: " << node_count[0] << std::endl;
+    std::cout << "Time: " << get_time_ms() - start_time << std::endl << std::endl;
+}
+
 void moveGenBugCheck(){
     BoardContainer startPos = BoardContainer(start_position);
 
@@ -1405,12 +1440,21 @@ void moveGenBugCheck(){
 void moveGenAverageTime(std::string fenPos){
     BoardContainer position = BoardContainer(fenPos);
     int total_time = get_time_ms();
-    for(int i = 0; i < 5; i++){
+    for(int i = 0; i < 20; i++){
         int start_time = get_time_ms();
         perftDriver(perftDepth, position);
         std::cout << "Time " << i << ": " << get_time_ms() - start_time << std::endl;
     }
-    std::cout << "Average time: " << (get_time_ms() - total_time)/5.0 << std::endl;
+    std::cout << "Average time: " << (get_time_ms() - total_time)/20.0 << std::endl;
+}
+
+/*----------------------------------*/
+/*                UCI               */
+/*----------------------------------*/
+
+int parseMove(std::string moveString){
+
+    return 0;
 }
 
 /*----------------------------------*/
@@ -1419,14 +1463,6 @@ void moveGenAverageTime(std::string fenPos){
 
 int main(){
     init();
-
-    moveGenAverageTime();
-    // int start_time = get_time_ms();
-    // BoardContainer boards = BoardContainer(tricky_position);
-    // perftDriver(5, boards);
-
-    // std::cout << "Time taken: " << get_time_ms() - start_time << std::endl;
-    // std::cout << "Nodes: " << node_count;
 
     return 0;
 }
