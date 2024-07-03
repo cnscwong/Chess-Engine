@@ -1438,6 +1438,7 @@ void moveGenAverageTime(std::string fenPos){
 /*                UCI               */
 /*----------------------------------*/
 
+// Parses a inputted move string given by UCI protocol or user input
 Move parseMove(std::string moveString){
     MoveList move_list;
 
@@ -1474,23 +1475,52 @@ Move parseMove(std::string moveString){
     return Move();
 }
 
+// Parses a given position string given by UCI protocol or user input
+void parsePosition(std::string command){
+    int ind = 9;
+    if(strncmp(&command[ind], "startpos", 8) == 0){
+        board = Chessboard(start_position);
+    }else if(strncmp(&command[ind], "fen", 3) == 0){
+        ind += 4;
+        board = Chessboard(&command[ind]);
+    }else{
+        board = Chessboard(start_position);
+    }
+
+    ind = command.find("moves");
+    if(ind != -1){
+        ind += 6;
+        
+        while(&command[ind]){
+            Move move = parseMove(&command[ind]);
+
+            // if illegal
+            if(move.from == no_sq){
+                break;
+            }
+
+            makeMove(move, all);
+
+            while(&command[ind] && command[ind] != ' '){
+                ind++;
+            }
+            ind++;
+        }
+    }
+}
+
+
+
 /*----------------------------------*/
 /*               MAIN               */
 /*----------------------------------*/
 
 int main(){
     init();
-    
-    board = Chessboard("r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPpP/R3K2R b KQkq - 0 1 ");
-    board.printChessboard();
-    Move move = parseMove("g2g1n");
 
-    if(move.from != no_sq){
-        makeMove(move, all);
-        board.printChessboard();
-    }else{
-        std::cout << "Illegal move";
-    }
+    parsePosition("position startpos moves e2e4 e7e5 g1f3");
+    board.printChessboard();
+
 
     return 0;
 }
