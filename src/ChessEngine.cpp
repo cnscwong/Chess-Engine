@@ -685,8 +685,8 @@ class Move{
     int flags;
 
     Move(){
-        from = 0;
-        to = 0;
+        from = no_sq;
+        to = no_sq;
         piece = 0;
         promotedPiece = 0;
         flags = 0;
@@ -1211,129 +1211,115 @@ const int castling_rights[64] = {
     13, 15, 15, 15, 12, 15, 15, 14,
 };
 
-class BoardContainer{
-    public:
-    Chessboard board;
-    Chessboard copy;
+Chessboard board = Chessboard();
+Chessboard copy = Chessboard();
 
-    BoardContainer(){
-        board = Chessboard();
-        copy = Chessboard();
-    }
+inline void saveBoard(){
+    copy = board;
+}
 
-    BoardContainer(std::string fen){
-        board = Chessboard(fen);
-        copy = Chessboard(fen);
-    }
+inline void restoreBoard(){
+    board = copy;
+}
 
+inline int makeMove(Move move, int moveFlag){
+    bool isWhite = board.side == White;
 
-    inline void saveBoard(){
-        copy = board;
-    }
+    if(moveFlag == all){
+        saveBoard();
 
-    inline void restoreBoard(){
-        board = copy;
-    }
+        clear(board.pieceBoards[move.piece], move.from);
+        set(board.pieceBoards[move.piece], move.to);
+        clear(board.occupancies[board.side], move.from);
+        set(board.occupancies[board.side], move.to);
 
-    inline int makeMove(Move move, int moveFlag){
-        bool isWhite = board.side == White;
-
-        if(moveFlag == all){
-            this->saveBoard();
-
-            clear(board.pieceBoards[move.piece], move.from);
-            set(board.pieceBoards[move.piece], move.to);
-            clear(board.occupancies[board.side], move.from);
-            set(board.occupancies[board.side], move.to);
-
-            if(move.flags & CAPTURE){
-                int startInd, endInd;
-                if(isWhite){
-                    startInd = p;
-                    endInd = k;
-                }else{
-                    startInd = P;
-                    endInd = K;
-                }
-
-                for(int piece = startInd; piece <= endInd; piece++){
-                    if(getSquare(board.pieceBoards[piece], move.to)){
-                        clear(board.pieceBoards[piece], move.to);
-                        break;
-                    }
-                }
-
-                clear(board.occupancies[getEnemy(board.side)], move.to);
-            }
-
-            if(move.promotedPiece){
-                clear(board.pieceBoards[(isWhite) ? P:p], move.to);
-                set(board.pieceBoards[move.promotedPiece], move.to);
-            }
-
-            if(move.flags & ENPASSANT){
-                (isWhite) ? clear(board.pieceBoards[p], move.to + DOWN):clear(board.pieceBoards[P], move.to + UP);
-                (isWhite) ? clear(board.occupancies[Black], move.to + DOWN):clear(board.occupancies[White], move.to + UP);
-            }
-
-            board.enpassant = no_sq;
-
-            if(move.flags & DOUBLE_PUSH){
-                (isWhite) ? (board.enpassant = move.to + DOWN):(board.enpassant = move.to + UP);
-            }
-
-            if(move.flags & CASTLE){
-                switch(move.to){
-                    case(G1):
-                        clear(board.pieceBoards[R], H1);
-                        set(board.pieceBoards[R], F1);
-                        clear(board.occupancies[board.side], H1);
-                        set(board.occupancies[board.side], F1);
-                        break;
-                    case(C1):
-                        clear(board.pieceBoards[R], A1);
-                        set(board.pieceBoards[R], D1);
-                        clear(board.occupancies[board.side], A1);
-                        set(board.occupancies[board.side], D1);
-                        break;
-                    case(G8):
-                        clear(board.pieceBoards[r], H8);
-                        set(board.pieceBoards[r], F8);
-                        clear(board.occupancies[board.side], H8);
-                        set(board.occupancies[board.side], F8);
-                        break;
-                    case(C8):
-                        clear(board.pieceBoards[r], A8);
-                        set(board.pieceBoards[r], D8);
-                        clear(board.occupancies[board.side], A8);
-                        set(board.occupancies[board.side], D8);
-                        break;
-                }
-            }
-
-            board.castle &= castling_rights[move.from];
-            board.castle &= castling_rights[move.to];
-
-            board.occupancies[Both] = board.occupancies[White] | board.occupancies[Black];
-
-            board.side = getEnemy(board.side);
-
-            if(board.isAttacked(!isWhite ? findLSB(board.pieceBoards[k]):findLSB(board.pieceBoards[K]), board.side)){
-                this->restoreBoard();
-
-                return 0;
+        if(move.flags & CAPTURE){
+            int startInd, endInd;
+            if(isWhite){
+                startInd = p;
+                endInd = k;
             }else{
-                return 1;
+                startInd = P;
+                endInd = K;
             }
-        }else{
-            if(move.flags & CAPTURE){
-                return makeMove(move, all);
-            }else{
-                return 0;
+
+            for(int piece = startInd; piece <= endInd; piece++){
+                if(getSquare(board.pieceBoards[piece], move.to)){
+                    clear(board.pieceBoards[piece], move.to);
+                    break;
+                }
+            }
+
+            clear(board.occupancies[getEnemy(board.side)], move.to);
+        }
+
+        if(move.promotedPiece){
+            clear(board.pieceBoards[(isWhite) ? P:p], move.to);
+            set(board.pieceBoards[move.promotedPiece], move.to);
+        }
+
+        if(move.flags & ENPASSANT){
+            (isWhite) ? clear(board.pieceBoards[p], move.to + DOWN):clear(board.pieceBoards[P], move.to + UP);
+            (isWhite) ? clear(board.occupancies[Black], move.to + DOWN):clear(board.occupancies[White], move.to + UP);
+        }
+
+        board.enpassant = no_sq;
+
+        if(move.flags & DOUBLE_PUSH){
+            (isWhite) ? (board.enpassant = move.to + DOWN):(board.enpassant = move.to + UP);
+        }
+
+        if(move.flags & CASTLE){
+            switch(move.to){
+                case(G1):
+                    clear(board.pieceBoards[R], H1);
+                    set(board.pieceBoards[R], F1);
+                    clear(board.occupancies[board.side], H1);
+                    set(board.occupancies[board.side], F1);
+                    break;
+                case(C1):
+                    clear(board.pieceBoards[R], A1);
+                    set(board.pieceBoards[R], D1);
+                    clear(board.occupancies[board.side], A1);
+                    set(board.occupancies[board.side], D1);
+                    break;
+                case(G8):
+                    clear(board.pieceBoards[r], H8);
+                    set(board.pieceBoards[r], F8);
+                    clear(board.occupancies[board.side], H8);
+                    set(board.occupancies[board.side], F8);
+                    break;
+                case(C8):
+                    clear(board.pieceBoards[r], A8);
+                    set(board.pieceBoards[r], D8);
+                    clear(board.occupancies[board.side], A8);
+                    set(board.occupancies[board.side], D8);
+                    break;
             }
         }
+
+        board.castle &= castling_rights[move.from];
+        board.castle &= castling_rights[move.to];
+
+        board.occupancies[Both] = board.occupancies[White] | board.occupancies[Black];
+
+        board.side = getEnemy(board.side);
+
+        if(board.isAttacked(!isWhite ? findLSB(board.pieceBoards[k]):findLSB(board.pieceBoards[K]), board.side)){
+            restoreBoard();
+
+            return 0;
+        }else{
+            return 1;
+        }
+    }else{
+        if(move.flags & CAPTURE){
+            return makeMove(move, all);
+        }else{
+            return 0;
+        }
     }
-};
+}
 
 /*----------------------------------*/
 /*          INITIALIZATION          */
@@ -1356,7 +1342,7 @@ const int perftDepth = 5;
 long node_count[perftDepth + 1] = {0};
 
 
-static inline void perftDriver(int depth, BoardContainer boards){
+static inline void perftDriver(int depth){
     node_count[depth]++;
     if(depth == 0){
         return;
@@ -1364,44 +1350,44 @@ static inline void perftDriver(int depth, BoardContainer boards){
 
     MoveList move_list;
 
-    boards.board.generateMoves(move_list);
+    board.generateMoves(move_list);
 
     for(int moveIndex = 0; moveIndex < move_list.count; moveIndex++){
-        boards.saveBoard();
+        saveBoard();
 
-        if(!boards.makeMove(move_list.moves[moveIndex], all)){
+        if(!makeMove(move_list.moves[moveIndex], all)){
             continue;
         }
 
-        perftDriver(depth - 1, boards);
+        perftDriver(depth - 1);
 
-        boards.restoreBoard();
+        restoreBoard();
     }
 }
 
-void perftTest(int depth, BoardContainer boards){
+void perftTest(int depth){
     std::cout << "Performance Test\n\n";
 
     MoveList move_list;
 
-    boards.board.generateMoves(move_list);
+    board.generateMoves(move_list);
 
     long start_time = get_time_ms();
 
     for(int moveIndex = 0; moveIndex < move_list.count; moveIndex++){
-        boards.saveBoard();
+        saveBoard();
 
-        if(!boards.makeMove(move_list.moves[moveIndex], all)){
+        if(!makeMove(move_list.moves[moveIndex], all)){
             continue;
         }
 
         long old_nodes = node_count[0];
 
-        perftDriver(depth - 1, boards);
+        perftDriver(depth - 1);
 
         long nodesPerDriver = node_count[0] - old_nodes;
 
-        boards.restoreBoard();
+        restoreBoard();
 
         std::cout << "Move: " << toSquare[move_list.moves[moveIndex].from] << toSquare[move_list.moves[moveIndex].to] << 
         piecePromotion[move_list.moves[moveIndex].promotedPiece] << "   Nodes: " << nodesPerDriver << std::endl;
@@ -1413,9 +1399,9 @@ void perftTest(int depth, BoardContainer boards){
 }
 
 void moveGenBugCheck(){
-    BoardContainer startPos = BoardContainer(start_position);
+    board = Chessboard(start_position);
 
-    perftDriver(perftDepth, startPos);
+    perftDriver(perftDepth);
     assert(node_count[0] == 4865609);
     assert(node_count[1] == 197281);
     assert(node_count[2] == 8902);
@@ -1425,9 +1411,9 @@ void moveGenBugCheck(){
 
     memset(node_count, 0, sizeof(node_count));
 
-    BoardContainer trickyPos = BoardContainer(tricky_position);
+    board = Chessboard(tricky_position);
 
-    perftDriver(perftDepth, trickyPos);
+    perftDriver(perftDepth);
     assert(node_count[0] == 193690690);
     assert(node_count[1] == 4085603);
     assert(node_count[2] == 97862);
@@ -1438,11 +1424,11 @@ void moveGenBugCheck(){
 }
 
 void moveGenAverageTime(std::string fenPos){
-    BoardContainer position = BoardContainer(fenPos);
+    board = Chessboard(fenPos);
     int total_time = get_time_ms();
     for(int i = 0; i < 20; i++){
         int start_time = get_time_ms();
-        perftDriver(perftDepth, position);
+        perftDriver(perftDepth);
         std::cout << "Time " << i << ": " << get_time_ms() - start_time << std::endl;
     }
     std::cout << "Average time: " << (get_time_ms() - total_time)/20.0 << std::endl;
@@ -1452,9 +1438,40 @@ void moveGenAverageTime(std::string fenPos){
 /*                UCI               */
 /*----------------------------------*/
 
-int parseMove(std::string moveString){
+Move parseMove(std::string moveString){
+    MoveList move_list;
 
-    return 0;
+    board.generateMoves(move_list);
+
+    int from = (moveString[0] - 'a') + (8 - (moveString[1] - '0'))*8;
+    int to = (moveString[2] - 'a') + (8 - (moveString[3] - '0'))*8;
+
+    for(int ind = 0; ind < move_list.count; ind++){
+        Move move = move_list.moves[ind];
+
+        if(from == move.from && to == move.to){
+            int promotedPiece = move.promotedPiece;
+        
+            if(promotedPiece){
+                if((promotedPiece == Q || promotedPiece == q) && moveString[4] == 'q'){
+                    return move;
+                }else if((promotedPiece == R || promotedPiece == r) && moveString[4] == 'r'){
+                    return move;
+                }else if((promotedPiece == B || promotedPiece == b) && moveString[4] == 'b'){
+                    return move;
+                }else if((promotedPiece == N || promotedPiece == n) && moveString[4] == 'n'){
+                    return move;
+                }
+
+                // illegal promotion
+                continue;
+            }
+
+            return move;
+        }
+    }
+
+    return Move();
 }
 
 /*----------------------------------*/
@@ -1463,6 +1480,17 @@ int parseMove(std::string moveString){
 
 int main(){
     init();
+    
+    board = Chessboard("r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPpP/R3K2R b KQkq - 0 1 ");
+    board.printChessboard();
+    Move move = parseMove("g2g1n");
+
+    if(move.from != no_sq){
+        makeMove(move, all);
+        board.printChessboard();
+    }else{
+        std::cout << "Illegal move";
+    }
 
     return 0;
 }
