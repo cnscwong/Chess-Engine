@@ -1435,6 +1435,14 @@ void moveGenAverageTime(std::string fenPos){
 }
 
 /*----------------------------------*/
+/*              SEARCH              */
+/*----------------------------------*/
+
+void searchPosition(int depth){
+    std::cout << "bestmove d2d4\n";
+}
+
+/*----------------------------------*/
 /*                UCI               */
 /*----------------------------------*/
 
@@ -1507,9 +1515,83 @@ void parsePosition(std::string command){
             ind++;
         }
     }
+
+    board.printChessboard();
 }
 
+// parse UCI go command
+void parseGo(std::string command){
+    int depth = -1;
+    int ind = command.find("depth");
 
+    if(ind != -1){
+        ind += 6;
+        depth = atoi(&command[ind]);
+    }else{
+        depth = 6;
+    }
+
+    searchPosition(depth);
+}
+
+// main UCI program
+void uciLoop(){
+    setbuf(stdin, NULL);
+    setbuf(stdout, NULL);
+
+    std::string input;
+
+    std::cout << "id name BitboardChessEngine\n";
+    std::cout << "id author CW\n";
+    std::cout << "uciok\n";
+
+    while(1){
+        fflush(stdout);
+
+        getline(std::cin, input);
+
+        if(input[0] == '\n'){
+            continue;
+        }
+        
+        // UCI isready command
+        if(strncmp(&input[0], "isready", 7) == 0){
+            std::cout << "readyok\n";
+            continue;
+        }
+        
+        // UCI position command
+        if(strncmp(&input[0], "position", 8) == 0){
+            parsePosition(input);
+            continue;
+        }
+
+        // UCI new game command
+        if(strncmp(&input[0], "ucinewgame", 10) == 0){
+            parsePosition("position startpos");
+            continue;
+        }
+
+        // UCI go command
+        if(strncmp(&input[0], "go", 2) == 0){
+            parseGo(input);
+            continue;
+        }
+        
+        // UCI quit command
+        if(strncmp(&input[0], "quit", 2) == 0){
+            break;
+        }
+
+        // UCI uci command
+        if(strncmp(&input[0], "uci", 3) == 0){
+            std::cout << "id name BitboardChessEngine\n";
+            std::cout << "id author CW\n";
+            std::cout << "uciok\n";
+            continue;
+        }
+    }
+}
 
 /*----------------------------------*/
 /*               MAIN               */
@@ -1518,8 +1600,7 @@ void parsePosition(std::string command){
 int main(){
     init();
 
-    parsePosition("position startpos moves e2e4 e7e5 g1f3");
-    board.printChessboard();
+    uciLoop();
 
 
     return 0;
