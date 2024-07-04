@@ -1644,6 +1644,10 @@ static inline int negamax(int alpha, int beta, int depth, BoardContainer boards)
 
     nodes++;
 
+    int in_check = boards.board.isAttacked((boards.board.side == White) ? findLSB(boards.board.pieceBoards[K]):findLSB(boards.board.pieceBoards[k]), boards.board.side^1);
+
+    int legal_moves = 0;
+
     Move best_sofar;
 
     int old_alpha = alpha;
@@ -1661,6 +1665,8 @@ static inline int negamax(int alpha, int beta, int depth, BoardContainer boards)
             ply--;
             continue;
         }
+
+        legal_moves++;
 
         int score = -negamax(-beta, -alpha, depth - 1, boards);
 
@@ -1685,13 +1691,16 @@ static inline int negamax(int alpha, int beta, int depth, BoardContainer boards)
         }
     }
 
+    if(legal_moves == 0){
+        if(in_check){
+            return -49000 + ply;
+        }else{
+            return 0;
+        }
+    }
+
     if(old_alpha != alpha){
         best_move = best_sofar;
-        boards.board.printChessboard();
-        std::cout << "Alpha: " << alpha << std::endl;
-        std::cout << "Move: ";
-        best_move.print();
-        std::cout << std::endl << std::endl;
     }
 
     // node fails low
@@ -1700,6 +1709,8 @@ static inline int negamax(int alpha, int beta, int depth, BoardContainer boards)
 
 void searchPosition(int depth, BoardContainer boards){
     int score = negamax(-50000, 50000, depth, boards);
+
+    std::cout << "info score cp " << score << " depth " << depth << " nodes " << nodes << std::endl;
 
     std::cout << "bestmove ";
     best_move.print();
@@ -1866,7 +1877,7 @@ void uciLoop(){
 int main(){
     init();
 
-    int debug = 1;
+    int debug = 0;
 
     if(debug){
         BoardContainer boards;
