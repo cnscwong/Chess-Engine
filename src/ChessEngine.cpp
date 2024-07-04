@@ -671,9 +671,11 @@ static inline Bitboard getQueenAttacks(int square, Bitboard occupancy){
 /*       MOVES REPRESENTATION       */
 /*----------------------------------*/
 
+// Flags for special move types
 enum moveFlags {QUIET = 0, CAPTURE = 1, DOUBLE_PUSH = 2, ENPASSANT = 4, CASTLE = 8};
 std::map<int, char> piecePromotion = {{N, 'n'}, {B, 'b'}, {R, 'r'}, {Q, 'q'}, {n, 'n'}, {b, 'b'}, {r, 'r'}, {q, 'q'}};
 
+// Class to store all information needed for a move
 class Move{
     public:
     // Squares involving the move
@@ -701,10 +703,11 @@ class Move{
     }
 
     void print(){
-        std::cout << toSquare[from] << toSquare[to] << piecePromotion[promotedPiece] << std::endl;
+        std::cout << toSquare[from] << toSquare[to] << piecePromotion[promotedPiece];
     }
 };
 
+// Class to store all possible moves for a chessboard state
 class MoveList{
     public:
     Move moves[256];
@@ -754,6 +757,7 @@ class Chessboard{
     int enpassant = no_sq;
     int castle = 0;
 
+    // Default constructor initializes chessboard to starting position
     Chessboard(){
         // Init white pieces
         pieceBoards[P] = RANK_2;
@@ -872,6 +876,7 @@ class Chessboard{
         return false;
     }
 
+    // Generates all pseudolegal moves in current chessboard state
     inline void generateMoves(MoveList &move_list){
         move_list.count = 0;
         // Integers representing the initial and final squares of a piece after a move
@@ -1151,6 +1156,7 @@ class Chessboard{
     /*          CHESSBOARD DEBUG        */
     /*----------------------------------*/
 
+    // Prints which squares are attacked by given side in the current chessboard 
     void printAttackedState(int side){
         for(int rank = 0; rank < 8; rank++){
             std::cout << 8 - rank << "   ";
@@ -1198,8 +1204,10 @@ class Chessboard{
 /*           MAKING MOVES           */
 /*----------------------------------*/
 
+// flag to indicate what type the move is in makeMove function
 enum { all, captures};
 
+// Array for updating castling rights after every move
 const int castling_rights[64] = {
      7, 15, 15, 15,  3, 15, 15, 11, 
     15, 15, 15, 15, 15, 15, 15, 15,
@@ -1211,115 +1219,131 @@ const int castling_rights[64] = {
     13, 15, 15, 15, 12, 15, 15, 14,
 };
 
-Chessboard board = Chessboard();
-Chessboard copy = Chessboard();
+class BoardContainer{
+    public:
+    Chessboard board;
+    Chessboard copy;
 
-inline void saveBoard(){
-    copy = board;
-}
+    BoardContainer(){
+        board = Chessboard();
+        copy = Chessboard();
+    }
 
-inline void restoreBoard(){
-    board = copy;
-}
+    BoardContainer(std::string fen){
+        board = Chessboard(fen);
+        copy = Chessboard(fen);
+    }
 
-inline int makeMove(Move move, int moveFlag){
-    bool isWhite = board.side == White;
+    // takes a copy of the board
+    inline void saveBoard(){
+        copy = board;
+    }
 
-    if(moveFlag == all){
-        saveBoard();
+    // restores the board to the last saved state
+    inline void restoreBoard(){
+        board = copy;
+    }
 
-        clear(board.pieceBoards[move.piece], move.from);
-        set(board.pieceBoards[move.piece], move.to);
-        clear(board.occupancies[board.side], move.from);
-        set(board.occupancies[board.side], move.to);
+    // Makes a given move on the global board variable
+    inline int makeMove(Move move, int moveFlag){
+        bool isWhite = board.side == White;
 
-        if(move.flags & CAPTURE){
-            int startInd, endInd;
-            if(isWhite){
-                startInd = p;
-                endInd = k;
-            }else{
-                startInd = P;
-                endInd = K;
+        if(moveFlag == all){
+            saveBoard();
+
+            clear(board.pieceBoards[move.piece], move.from);
+            set(board.pieceBoards[move.piece], move.to);
+            clear(board.occupancies[board.side], move.from);
+            set(board.occupancies[board.side], move.to);
+
+            if(move.flags & CAPTURE){
+                int startInd, endInd;
+                if(isWhite){
+                    startInd = p;
+                    endInd = k;
+                }else{
+                    startInd = P;
+                    endInd = K;
+                }
+
+                for(int piece = startInd; piece <= endInd; piece++){
+                    if(getSquare(board.pieceBoards[piece], move.to)){
+                        clear(board.pieceBoards[piece], move.to);
+                        break;
+                    }
+                }
+
+                clear(board.occupancies[getEnemy(board.side)], move.to);
             }
 
-            for(int piece = startInd; piece <= endInd; piece++){
-                if(getSquare(board.pieceBoards[piece], move.to)){
-                    clear(board.pieceBoards[piece], move.to);
-                    break;
+            if(move.promotedPiece){
+                clear(board.pieceBoards[(isWhite) ? P:p], move.to);
+                set(board.pieceBoards[move.promotedPiece], move.to);
+            }
+
+            if(move.flags & ENPASSANT){
+                (isWhite) ? clear(board.pieceBoards[p], move.to + DOWN):clear(board.pieceBoards[P], move.to + UP);
+                (isWhite) ? clear(board.occupancies[Black], move.to + DOWN):clear(board.occupancies[White], move.to + UP);
+            }
+
+            board.enpassant = no_sq;
+
+            if(move.flags & DOUBLE_PUSH){
+                (isWhite) ? (board.enpassant = move.to + DOWN):(board.enpassant = move.to + UP);
+            }
+
+            if(move.flags & CASTLE){
+                switch(move.to){
+                    case(G1):
+                        clear(board.pieceBoards[R], H1);
+                        set(board.pieceBoards[R], F1);
+                        clear(board.occupancies[board.side], H1);
+                        set(board.occupancies[board.side], F1);
+                        break;
+                    case(C1):
+                        clear(board.pieceBoards[R], A1);
+                        set(board.pieceBoards[R], D1);
+                        clear(board.occupancies[board.side], A1);
+                        set(board.occupancies[board.side], D1);
+                        break;
+                    case(G8):
+                        clear(board.pieceBoards[r], H8);
+                        set(board.pieceBoards[r], F8);
+                        clear(board.occupancies[board.side], H8);
+                        set(board.occupancies[board.side], F8);
+                        break;
+                    case(C8):
+                        clear(board.pieceBoards[r], A8);
+                        set(board.pieceBoards[r], D8);
+                        clear(board.occupancies[board.side], A8);
+                        set(board.occupancies[board.side], D8);
+                        break;
                 }
             }
 
-            clear(board.occupancies[getEnemy(board.side)], move.to);
-        }
+            board.castle &= castling_rights[move.from];
+            board.castle &= castling_rights[move.to];
 
-        if(move.promotedPiece){
-            clear(board.pieceBoards[(isWhite) ? P:p], move.to);
-            set(board.pieceBoards[move.promotedPiece], move.to);
-        }
+            board.occupancies[Both] = board.occupancies[White] | board.occupancies[Black];
 
-        if(move.flags & ENPASSANT){
-            (isWhite) ? clear(board.pieceBoards[p], move.to + DOWN):clear(board.pieceBoards[P], move.to + UP);
-            (isWhite) ? clear(board.occupancies[Black], move.to + DOWN):clear(board.occupancies[White], move.to + UP);
-        }
+            board.side = getEnemy(board.side);
 
-        board.enpassant = no_sq;
+            if(board.isAttacked(!isWhite ? findLSB(board.pieceBoards[k]):findLSB(board.pieceBoards[K]), board.side)){
+                restoreBoard();
 
-        if(move.flags & DOUBLE_PUSH){
-            (isWhite) ? (board.enpassant = move.to + DOWN):(board.enpassant = move.to + UP);
-        }
-
-        if(move.flags & CASTLE){
-            switch(move.to){
-                case(G1):
-                    clear(board.pieceBoards[R], H1);
-                    set(board.pieceBoards[R], F1);
-                    clear(board.occupancies[board.side], H1);
-                    set(board.occupancies[board.side], F1);
-                    break;
-                case(C1):
-                    clear(board.pieceBoards[R], A1);
-                    set(board.pieceBoards[R], D1);
-                    clear(board.occupancies[board.side], A1);
-                    set(board.occupancies[board.side], D1);
-                    break;
-                case(G8):
-                    clear(board.pieceBoards[r], H8);
-                    set(board.pieceBoards[r], F8);
-                    clear(board.occupancies[board.side], H8);
-                    set(board.occupancies[board.side], F8);
-                    break;
-                case(C8):
-                    clear(board.pieceBoards[r], A8);
-                    set(board.pieceBoards[r], D8);
-                    clear(board.occupancies[board.side], A8);
-                    set(board.occupancies[board.side], D8);
-                    break;
+                return 0;
+            }else{
+                return 1;
+            }
+        }else{
+            if(move.flags & CAPTURE){
+                return makeMove(move, all);
+            }else{
+                return 0;
             }
         }
-
-        board.castle &= castling_rights[move.from];
-        board.castle &= castling_rights[move.to];
-
-        board.occupancies[Both] = board.occupancies[White] | board.occupancies[Black];
-
-        board.side = getEnemy(board.side);
-
-        if(board.isAttacked(!isWhite ? findLSB(board.pieceBoards[k]):findLSB(board.pieceBoards[K]), board.side)){
-            restoreBoard();
-
-            return 0;
-        }else{
-            return 1;
-        }
-    }else{
-        if(move.flags & CAPTURE){
-            return makeMove(move, all);
-        }else{
-            return 0;
-        }
     }
-}
+};
 
 /*----------------------------------*/
 /*          INITIALIZATION          */
@@ -1334,6 +1358,7 @@ void init(){
 /*        PERFORMANCE TESTING       */
 /*----------------------------------*/
 
+// Gets current ms time
 int get_time_ms(){
     return GetTickCount();
 }
@@ -1341,8 +1366,8 @@ int get_time_ms(){
 const int perftDepth = 5;
 long node_count[perftDepth + 1] = {0};
 
-
-static inline void perftDriver(int depth){
+// Counts all possible moves for a certain depth to compare with a working chess engine move generator to see if there are any bugs
+static inline void perftDriver(int depth, BoardContainer boards){
     node_count[depth]++;
     if(depth == 0){
         return;
@@ -1350,44 +1375,45 @@ static inline void perftDriver(int depth){
 
     MoveList move_list;
 
-    board.generateMoves(move_list);
+    boards.board.generateMoves(move_list);
 
     for(int moveIndex = 0; moveIndex < move_list.count; moveIndex++){
-        saveBoard();
+        boards.saveBoard();
 
-        if(!makeMove(move_list.moves[moveIndex], all)){
+        if(!boards.makeMove(move_list.moves[moveIndex], all)){
             continue;
         }
 
-        perftDriver(depth - 1);
+        perftDriver(depth - 1, boards);
 
-        restoreBoard();
+        boards.restoreBoard();
     }
 }
 
-void perftTest(int depth){
+// Outputs counts per node for better debugging in case of move gen bug
+void perftTest(int depth, BoardContainer boards){
     std::cout << "Performance Test\n\n";
 
     MoveList move_list;
 
-    board.generateMoves(move_list);
+    boards.board.generateMoves(move_list);
 
     long start_time = get_time_ms();
 
     for(int moveIndex = 0; moveIndex < move_list.count; moveIndex++){
-        saveBoard();
+        boards.saveBoard();
 
-        if(!makeMove(move_list.moves[moveIndex], all)){
+        if(!boards.makeMove(move_list.moves[moveIndex], all)){
             continue;
         }
 
         long old_nodes = node_count[0];
 
-        perftDriver(depth - 1);
+        perftDriver(depth - 1, boards);
 
         long nodesPerDriver = node_count[0] - old_nodes;
 
-        restoreBoard();
+        boards.restoreBoard();
 
         std::cout << "Move: " << toSquare[move_list.moves[moveIndex].from] << toSquare[move_list.moves[moveIndex].to] << 
         piecePromotion[move_list.moves[moveIndex].promotedPiece] << "   Nodes: " << nodesPerDriver << std::endl;
@@ -1398,10 +1424,11 @@ void perftTest(int depth){
     std::cout << "Time: " << get_time_ms() - start_time << std::endl << std::endl;
 }
 
+// Checks if the move gen is bug free
 void moveGenBugCheck(){
-    board = Chessboard(start_position);
+    BoardContainer boards = BoardContainer();
 
-    perftDriver(perftDepth);
+    perftDriver(perftDepth, boards);
     assert(node_count[0] == 4865609);
     assert(node_count[1] == 197281);
     assert(node_count[2] == 8902);
@@ -1411,9 +1438,9 @@ void moveGenBugCheck(){
 
     memset(node_count, 0, sizeof(node_count));
 
-    board = Chessboard(tricky_position);
+    boards = BoardContainer(tricky_position);
 
-    perftDriver(perftDepth);
+    perftDriver(perftDepth, boards);
     assert(node_count[0] == 193690690);
     assert(node_count[1] == 4085603);
     assert(node_count[2] == 97862);
@@ -1423,34 +1450,273 @@ void moveGenBugCheck(){
     std::cout << "Passed! Move Generator is bug free!\n\n";
 }
 
+// Perft test to find average time of perftDriver after n attempts
 void moveGenAverageTime(std::string fenPos){
-    board = Chessboard(fenPos);
+    BoardContainer boards = BoardContainer(fenPos);
     int total_time = get_time_ms();
     for(int i = 0; i < 20; i++){
         int start_time = get_time_ms();
-        perftDriver(perftDepth);
+        perftDriver(perftDepth, boards);
         std::cout << "Time " << i << ": " << get_time_ms() - start_time << std::endl;
     }
     std::cout << "Average time: " << (get_time_ms() - total_time)/20.0 << std::endl;
 }
 
 /*----------------------------------*/
+/*            EVALUATION            */
+/*----------------------------------*/
+
+// Scores for each instance of the piece being alive on the board
+constexpr int materialScore[numPieces] = {
+    [P] = 100,
+    [N] = 300,
+    [B] = 350,
+    [R] = 500,
+    [Q] = 1000,
+    [K] = 10000,
+    [p] = -100,
+    [n] = -300,
+    [b] = -350,
+    [r] = -500,
+    [q] = -1000,
+    [k] = -10000,
+};
+
+// pawn positional score
+constexpr int pawn_score[64] = 
+{
+    90,  90,  90,  90,  90,  90,  90,  90,
+    30,  30,  30,  40,  40,  30,  30,  30,
+    20,  20,  20,  30,  30,  30,  20,  20,
+    10,  10,  10,  20,  20,  10,  10,  10,
+     5,   5,  10,  20,  20,   5,   5,   5,
+     0,   0,   0,   5,   5,   0,   0,   0,
+     0,   0,   0, -10, -10,   0,   0,   0,
+     0,   0,   0,   0,   0,   0,   0,   0
+};
+
+// knight positional score
+constexpr int knight_score[64] = 
+{
+    -5,   0,   0,   0,   0,   0,   0,  -5,
+    -5,   0,   0,  10,  10,   0,   0,  -5,
+    -5,   5,  20,  20,  20,  20,   5,  -5,
+    -5,  10,  20,  30,  30,  20,  10,  -5,
+    -5,  10,  20,  30,  30,  20,  10,  -5,
+    -5,   5,  20,  10,  10,  20,   5,  -5,
+    -5,   0,   0,   0,   0,   0,   0,  -5,
+    -5, -10,   0,   0,   0,   0, -10,  -5
+};
+
+// bishop positional score
+constexpr int bishop_score[64] = 
+{
+     0,   0,   0,   0,   0,   0,   0,   0,
+     0,   0,   0,   0,   0,   0,   0,   0,
+     0,   0,   0,  10,  10,   0,   0,   0,
+     0,   0,  10,  20,  20,  10,   0,   0,
+     0,   0,  10,  20,  20,  10,   0,   0,
+     0,  10,   0,   0,   0,   0,  10,   0,
+     0,  30,   0,   0,   0,   0,  30,   0,
+     0,   0, -10,   0,   0, -10,   0,   0
+
+};
+
+// rook positional score
+constexpr int rook_score[64] =
+{
+    50,  50,  50,  50,  50,  50,  50,  50,
+    50,  50,  50,  50,  50,  50,  50,  50,
+     0,   0,  10,  20,  20,  10,   0,   0,
+     0,   0,  10,  20,  20,  10,   0,   0,
+     0,   0,  10,  20,  20,  10,   0,   0,
+     0,   0,  10,  20,  20,  10,   0,   0,
+     0,   0,  10,  20,  20,  10,   0,   0,
+     0,   0,   0,  20,  20,   0,   0,   0
+
+};
+
+// king positional score
+constexpr int king_score[64] = 
+{
+     0,   0,   0,   0,   0,   0,   0,   0,
+     0,   0,   5,   5,   5,   5,   0,   0,
+     0,   5,   5,  10,  10,   5,   5,   0,
+     0,   5,  10,  20,  20,  10,   5,   0,
+     0,   5,  10,  20,  20,  10,   5,   0,
+     0,   0,   5,  10,  10,   5,   0,   0,
+     0,   5,   5,  -5,  -5,   0,   5,   0,
+     0,   0,   5,   0, -15,   0,  10,   0
+};
+
+// mirror positional score tables for opposite side
+const int mirror_score[64] =
+{
+    A1, B1, C1, D1, E1, F1, G1, H1,
+    A2, B2, C2, D2, E2, F2, G2, H2,
+    A3, B3, C3, D3, E3, F3, G3, H3,
+    A4, B4, C4, D4, E4, F4, G4, H4,
+    A5, B5, C5, D5, E5, F5, G5, H5,
+    A6, B6, C6, D6, E6, F6, G6, H6,
+    A7, B7, C7, D7, E7, F7, G7, H7,
+    A8, B8, C8, D8, E8, F8, G8, H8
+};
+
+static inline int evaluate(BoardContainer boards){
+    int score = 0;
+
+    Bitboard bitboard;
+
+    int square;
+
+    for(int piece = P; piece < numPieces; piece++){
+        bitboard = boards.board.pieceBoards[piece];
+
+        while(bitboard){
+            square = findLSB(bitboard);
+
+            score += materialScore[piece];
+
+            switch(piece){
+                case P:{
+                    score += pawn_score[square];
+                    break;
+                }
+                case N:{
+                    score += knight_score[square];
+                    break;
+                }
+                case B:{
+                    score += bishop_score[square];
+                    break;
+                }
+                case R:{
+                    score += rook_score[square];
+                    break;
+                }
+                case K:{
+                    score += king_score[square];
+                    break;
+                }
+
+                case p:{
+                    score -= pawn_score[mirror_score[square]];
+                    break;
+                }
+                case n:{
+                    score -= knight_score[mirror_score[square]];
+                    break;
+                }
+                case b:{
+                    score -= bishop_score[mirror_score[square]];
+                    break;
+                }
+                case r:{
+                    score -= rook_score[mirror_score[square]];
+                    break;
+                }
+                case k:{
+                    score -= king_score[mirror_score[square]];
+                    break;
+                }
+            }
+
+            clear(bitboard, square);
+        }
+    }
+
+    return (boards.board.side == White) ? score:-score;
+}
+
+/*----------------------------------*/
 /*              SEARCH              */
 /*----------------------------------*/
 
-void searchPosition(int depth){
-    std::cout << "bestmove d2d4\n";
+int ply = 0;
+int nodes = 0;
+Move best_move;
+
+// negamax alpha beta search
+static inline int negamax(int alpha, int beta, int depth, BoardContainer boards){
+    if(depth == 0){
+        return evaluate(boards);
+    }
+
+    nodes++;
+
+    Move best_sofar;
+
+    int old_alpha = alpha;
+
+    MoveList move_list;
+
+    boards.board.generateMoves(move_list);
+
+    for(int ind = 0; ind < move_list.count; ind++){
+        boards.saveBoard();
+
+        ply++;
+
+        if(boards.makeMove(move_list.moves[ind], all) == 0){
+            ply--;
+            continue;
+        }
+
+        int score = -negamax(-beta, -alpha, depth - 1, boards);
+
+        ply--;
+
+        boards.restoreBoard();
+
+        // fail hard beta cutoff, node fails high
+        if(score >= beta){
+            return beta;
+        }
+
+        // fount a better move
+        if(score > alpha){
+            // PV node
+            alpha = score;
+
+            if(ply == 0){
+                // Associate best move with best score
+                best_sofar = move_list.moves[ind];
+            }
+        }
+    }
+
+    if(old_alpha != alpha){
+        best_move = best_sofar;
+        boards.board.printChessboard();
+        std::cout << "Alpha: " << alpha << std::endl;
+        std::cout << "Move: ";
+        best_move.print();
+        std::cout << std::endl << std::endl;
+    }
+
+    // node fails low
+    return alpha;
+}
+
+void searchPosition(int depth, BoardContainer boards){
+    int score = negamax(-50000, 50000, depth, boards);
+
+    std::cout << "bestmove ";
+    best_move.print();
+    std::cout << std::endl;
 }
 
 /*----------------------------------*/
 /*                UCI               */
 /*----------------------------------*/
 
+BoardContainer boardState = BoardContainer();
+
 // Parses a inputted move string given by UCI protocol or user input
 Move parseMove(std::string moveString){
     MoveList move_list;
 
-    board.generateMoves(move_list);
+    boardState.board.generateMoves(move_list);
 
     int from = (moveString[0] - 'a') + (8 - (moveString[1] - '0'))*8;
     int to = (moveString[2] - 'a') + (8 - (moveString[3] - '0'))*8;
@@ -1487,12 +1753,12 @@ Move parseMove(std::string moveString){
 void parsePosition(std::string command){
     int ind = 9;
     if(strncmp(&command[ind], "startpos", 8) == 0){
-        board = Chessboard(start_position);
+        boardState.board = Chessboard(start_position);
     }else if(strncmp(&command[ind], "fen", 3) == 0){
         ind += 4;
-        board = Chessboard(&command[ind]);
+        boardState.board = Chessboard(&command[ind]);
     }else{
-        board = Chessboard(start_position);
+        boardState.board = Chessboard(start_position);
     }
 
     ind = command.find("moves");
@@ -1507,7 +1773,7 @@ void parsePosition(std::string command){
                 break;
             }
 
-            makeMove(move, all);
+            boardState.makeMove(move, all);
 
             while(&command[ind] && command[ind] != ' '){
                 ind++;
@@ -1516,7 +1782,7 @@ void parsePosition(std::string command){
         }
     }
 
-    board.printChessboard();
+    boardState.board.printChessboard();
 }
 
 // parse UCI go command
@@ -1528,10 +1794,10 @@ void parseGo(std::string command){
         ind += 6;
         depth = atoi(&command[ind]);
     }else{
-        depth = 6;
+        depth = 3;
     }
 
-    searchPosition(depth);
+    searchPosition(depth, boardState);
 }
 
 // main UCI program
@@ -1600,8 +1866,14 @@ void uciLoop(){
 int main(){
     init();
 
-    uciLoop();
+    int debug = 1;
 
+    if(debug){
+        BoardContainer boards;
+        searchPosition(3, boards);
+    }else{
+        uciLoop();
+    }
 
     return 0;
 }
