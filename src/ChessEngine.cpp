@@ -1632,14 +1632,130 @@ static inline int evaluate(BoardContainer boards){
 /*              SEARCH              */
 /*----------------------------------*/
 
+// Most Valuable Victim, Least Valuable Attacker lookup table [attacker][victim]
+static int mvv_lva[12][12] = {
+ 	105, 205, 305, 405, 505, 605,  105, 205, 305, 405, 505, 605,
+	104, 204, 304, 404, 504, 604,  104, 204, 304, 404, 504, 604,
+	103, 203, 303, 403, 503, 603,  103, 203, 303, 403, 503, 603,
+	102, 202, 302, 402, 502, 602,  102, 202, 302, 402, 502, 602,
+	101, 201, 301, 401, 501, 601,  101, 201, 301, 401, 501, 601,
+	100, 200, 300, 400, 500, 600,  100, 200, 300, 400, 500, 600,
+
+	105, 205, 305, 405, 505, 605,  105, 205, 305, 405, 505, 605,
+	104, 204, 304, 404, 504, 604,  104, 204, 304, 404, 504, 604,
+	103, 203, 303, 403, 503, 603,  103, 203, 303, 403, 503, 603,
+	102, 202, 302, 402, 502, 602,  102, 202, 302, 402, 502, 602,
+	101, 201, 301, 401, 501, 601,  101, 201, 301, 401, 501, 601,
+	100, 200, 300, 400, 500, 600,  100, 200, 300, 400, 500, 600
+};
+
 int ply = 0;
 int nodes = 0;
 Move best_move;
 
+// Scores a move based off of mvv lva lookup table
+static inline int scoreMove(Move move, BoardContainer boards){
+    if(move.flags & CAPTURE){
+        int target = P;
+
+        int startInd, endInd;
+        if(boards.board.side == White){
+            startInd = p;
+            endInd = k;
+        }else{
+            startInd = P;
+            endInd = K;
+        }
+
+        for(int piece = startInd; piece <= endInd; piece++){
+            if(getSquare(boards.board.pieceBoards[piece], move.to)){
+                target = piece;
+                break;
+            }
+        }
+        
+        return mvv_lva[move.piece][target];
+    }else{
+
+    }
+    return 0;
+}
+
+// prints all move scores
+void printMoveScores(MoveList move_list, BoardContainer boards){
+    std::cout << "Move Scores\n\n";
+    for(int count = 0; count < move_list.count; count++){
+        std::cout << "Move: ";
+        move_list.moves[count].print();
+        std::cout << "Score: " << scoreMove(move_list.moves[count], boards) << std::endl;
+    }
+}
+
+// sorts moves in descending order
+static inline int sortMoves(MoveList move_list, BoardContainer boards){
+    int moveScores[move_list.count];
+
+    for(int ind = 0; ind < move_list.count; ind++){
+        moveScores[ind] = scoreMove(move_list.moves[ind], boards);
+    }
+}
+
+// quiescence search
+static inline int quiescence(int alpha, int beta, BoardContainer boards){
+    nodes++;
+
+    int eval = evaluate(boards);
+
+    // fail hard beta cutoff, node fails high
+    if(eval >= beta){
+        return beta;
+    }
+
+    // fount a better move
+    if(eval > alpha){
+        // PV node
+        alpha = eval;
+    }
+
+    MoveList move_list;
+
+    boards.board.generateMoves(move_list);
+
+    for(int ind = 0; ind < move_list.count; ind++){
+        boards.saveBoard();
+
+        ply++;
+
+        if(boards.makeMove(move_list.moves[ind], captures) == 0){
+            ply--;
+            continue;
+        }
+
+        int score = -quiescence(-beta, -alpha, boards);
+
+        ply--;
+
+        boards.restoreBoard();
+
+        // fail hard beta cutoff, node fails high
+        if(score >= beta){
+            return beta;
+        }
+
+        // fount a better move
+        if(score > alpha){
+            // PV node
+            alpha = score;
+        }
+    }
+
+    return alpha;
+}
+
 // negamax alpha beta search
 static inline int negamax(int alpha, int beta, int depth, BoardContainer boards){
     if(depth == 0){
-        return evaluate(boards);
+        return quiescence(alpha, beta, boards);
     }
 
     nodes++;
@@ -1877,11 +1993,17 @@ void uciLoop(){
 int main(){
     init();
 
-    int debug = 0;
+    int debug = 1;
 
     if(debug){
-        BoardContainer boards;
-        searchPosition(3, boards);
+        BoardContainer boards = BoardContainer(tricky_position);
+        boards.board.printChessboard();
+        
+        MoveList move_list;
+
+        boards.board.generateMoves(move_list);
+
+        printMoveScores(move_list, boards);
     }else{
         uciLoop();
     }
