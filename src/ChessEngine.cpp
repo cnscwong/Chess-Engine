@@ -5,6 +5,7 @@
 #include <map>
 #include <windows.h>
 #include <assert.h>
+#include <bits/stdc++.h>
 
 /*----------------------------------*/
 /*             Bitboard             */
@@ -1684,20 +1685,35 @@ static inline int scoreMove(Move move, BoardContainer boards){
 // prints all move scores
 void printMoveScores(MoveList move_list, BoardContainer boards){
     std::cout << "Move Scores\n\n";
-    for(int count = 0; count < move_list.count; count++){
+    for(int ind = 0; ind < move_list.count; ind++){
         std::cout << "Move: ";
-        move_list.moves[count].print();
-        std::cout << "Score: " << scoreMove(move_list.moves[count], boards) << std::endl;
+        move_list.moves[ind].print();
+        std::cout << " Score: " << scoreMove(move_list.moves[ind], boards) << std::endl;
     }
 }
 
 // sorts moves in descending order
-static inline int sortMoves(MoveList move_list, BoardContainer boards){
+static inline int sortMoves(MoveList &move_list, BoardContainer boards){
     int moveScores[move_list.count];
+    std::pair<int, Move> pairs[move_list.count];
 
     for(int ind = 0; ind < move_list.count; ind++){
-        moveScores[ind] = scoreMove(move_list.moves[ind], boards);
+        pairs[ind].first = scoreMove(move_list.moves[ind], boards);
+        pairs[ind].second = move_list.moves[ind];
     }
+
+    // Sort the pair array
+    std::sort(pairs, pairs + move_list.count,  [](auto const& a, auto const& b) {
+        if( a.first > b.first ) return true;
+        return false;
+    } );
+
+    for(int ind = 0; ind < move_list.count; ind++){
+        moveScores[ind] = pairs[ind].first;
+        move_list.moves[ind] = pairs[ind].second;
+    }
+
+    return 0;
 }
 
 // quiescence search
@@ -1996,12 +2012,18 @@ int main(){
     int debug = 1;
 
     if(debug){
-        BoardContainer boards = BoardContainer(tricky_position);
+        BoardContainer boards = BoardContainer("r3k2r/p2pqpb1/bn2pnp1/2pPN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq c6 0 1 ");
         boards.board.printChessboard();
         
         MoveList move_list;
 
         boards.board.generateMoves(move_list);
+
+        // printMoveScores(move_list, boards);
+
+        std::cout << "\n\n";
+
+        sortMoves(move_list, boards);
 
         printMoveScores(move_list, boards);
     }else{
