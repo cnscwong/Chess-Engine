@@ -1692,25 +1692,31 @@ void printMoveScores(MoveList move_list, BoardContainer boards){
     }
 }
 
-// sorts moves in descending order
+// sort moves in descending order
 static inline int sortMoves(MoveList &move_list, BoardContainer boards){
     int moveScores[move_list.count];
-    std::pair<int, Move> pairs[move_list.count];
-
-    for(int ind = 0; ind < move_list.count; ind++){
-        pairs[ind].first = scoreMove(move_list.moves[ind], boards);
-        pairs[ind].second = move_list.moves[ind];
+    
+    for (int ind = 0; ind < move_list.count; ind++){
+        moveScores[ind] = scoreMove(move_list.moves[ind], boards);
     }
-
-    // Sort the pair array
-    std::sort(pairs, pairs + move_list.count,  [](auto const& a, auto const& b) {
-        if( a.first > b.first ) return true;
-        return false;
-    } );
-
-    for(int ind = 0; ind < move_list.count; ind++){
-        moveScores[ind] = pairs[ind].first;
-        move_list.moves[ind] = pairs[ind].second;
+    
+    for (int ind = 0; ind < move_list.count; ind++)    {
+        for (int nextInd = ind + 1; nextInd < move_list.count; nextInd++)
+        {
+            // compare current and next move scores
+            if (moveScores[ind] < moveScores[nextInd])
+            {
+                // swap scores
+                int temp_score = moveScores[ind];
+                moveScores[ind] = moveScores[nextInd];
+                moveScores[nextInd] = temp_score;
+                
+                // swap moves
+                Move temp_move = move_list.moves[ind];
+                move_list.moves[ind] = move_list.moves[nextInd];
+                move_list.moves[nextInd] = temp_move;
+            }
+        }
     }
 
     return 0;
@@ -1736,6 +1742,8 @@ static inline int quiescence(int alpha, int beta, BoardContainer boards){
     MoveList move_list;
 
     boards.board.generateMoves(move_list);
+
+    sortMoves(move_list, boards);
 
     for(int ind = 0; ind < move_list.count; ind++){
         boards.saveBoard();
@@ -1778,6 +1786,11 @@ static inline int negamax(int alpha, int beta, int depth, BoardContainer boards)
 
     int in_check = boards.board.isAttacked((boards.board.side == White) ? findLSB(boards.board.pieceBoards[K]):findLSB(boards.board.pieceBoards[k]), boards.board.side^1);
 
+    // increase depth if king in check
+    if(in_check){
+        depth++;
+    }
+
     int legal_moves = 0;
 
     Move best_sofar;
@@ -1787,6 +1800,8 @@ static inline int negamax(int alpha, int beta, int depth, BoardContainer boards)
     MoveList move_list;
 
     boards.board.generateMoves(move_list);
+
+    sortMoves(move_list, boards);
 
     for(int ind = 0; ind < move_list.count; ind++){
         boards.saveBoard();
@@ -2012,20 +2027,17 @@ int main(){
     int debug = 1;
 
     if(debug){
-        BoardContainer boards = BoardContainer("r3k2r/p2pqpb1/bn2pnp1/2pPN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq c6 0 1 ");
+        BoardContainer boards = BoardContainer(tricky_position);
         boards.board.printChessboard();
+        searchPosition(5, boards);
         
-        MoveList move_list;
+        // MoveList move_list;
 
-        boards.board.generateMoves(move_list);
+        // boards.board.generateMoves(move_list);
+
+        // sortMoves(move_list, boards);
 
         // printMoveScores(move_list, boards);
-
-        std::cout << "\n\n";
-
-        sortMoves(move_list, boards);
-
-        printMoveScores(move_list, boards);
     }else{
         uciLoop();
     }
