@@ -703,6 +703,10 @@ class Move{
         this->flags = flags;
     }
 
+    bool operator==(const Move &m){
+        return this->from == m.from && this->to == m.to && this->piece == m.piece && this->promotedPiece == m.promotedPiece && this->flags == m.flags;
+    }
+
     void print(){
         std::cout << toSquare[from] << toSquare[to] << piecePromotion[promotedPiece];
     }
@@ -1650,13 +1654,19 @@ static int mvv_lva[12][12] = {
 	100, 200, 300, 400, 500, 600,  100, 200, 300, 400, 500, 600
 };
 
+// killer moves
+Move killer_moves[2][64];
+
+// history moves
+int history_moves[12][64] = {0};
+
 int ply = 0;
 int nodes = 0;
 Move best_move;
 
 // Scores a move based off of mvv lva lookup table
 static inline int scoreMove(Move move, BoardContainer boards){
-    if(move.flags & CAPTURE){
+    if(move.flags & CAPTURE){ // Score captures
         int target = P;
 
         int startInd, endInd;
@@ -1675,9 +1685,15 @@ static inline int scoreMove(Move move, BoardContainer boards){
             }
         }
         
-        return mvv_lva[move.piece][target];
-    }else{
-
+        return mvv_lva[move.piece][target] + 10000;
+    }else{ // Score quiet moves
+        if(killer_moves[0][ply] == move){
+            return 9000;
+        }else if(killer_moves[1][ply] == move){
+            return 8000;
+        }else{
+            return history_moves[move.piece][move.to];
+        }
     }
     return 0;
 }
@@ -1823,11 +1839,17 @@ static inline int negamax(int alpha, int beta, int depth, BoardContainer boards)
 
         // fail hard beta cutoff, node fails high
         if(score >= beta){
+            // store killer moves
+            killer_moves[1][ply] = killer_moves[0][ply];
+            killer_moves[0][ply] = move_list.moves[ind];
+
             return beta;
         }
 
         // fount a better move
         if(score > alpha){
+            history_moves[move_list.moves[ind].piece][move_list.moves[ind].to] += depth;
+
             // PV node
             alpha = score;
 
@@ -2030,14 +2052,6 @@ int main(){
         BoardContainer boards = BoardContainer(tricky_position);
         boards.board.printChessboard();
         searchPosition(5, boards);
-        
-        // MoveList move_list;
-
-        // boards.board.generateMoves(move_list);
-
-        // sortMoves(move_list, boards);
-
-        // printMoveScores(move_list, boards);
     }else{
         uciLoop();
     }
