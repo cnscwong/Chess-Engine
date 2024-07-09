@@ -904,9 +904,9 @@ class Chessboard{
                             // Pawn promotion
                             if(canPromote){
                                 move_list.addMove(Move(from, to, piece, Q, 0));
+                                move_list.addMove(Move(from, to, piece, R, 0));
                                 move_list.addMove(Move(from, to, piece, B, 0));
                                 move_list.addMove(Move(from, to, piece, N, 0));
-                                move_list.addMove(Move(from, to, piece, R, 0));
                             }else{
                                 // Pawn push
                                 move_list.addMove(Move(from, to, piece, 0, 0));
@@ -924,9 +924,9 @@ class Chessboard{
 
                             if(canPromote){
                                 move_list.addMove(Move(from, to, piece, Q, CAPTURE));
+                                move_list.addMove(Move(from, to, piece, R, CAPTURE));
                                 move_list.addMove(Move(from, to, piece, B, CAPTURE));
                                 move_list.addMove(Move(from, to, piece, N, CAPTURE));
-                                move_list.addMove(Move(from, to, piece, R, CAPTURE));
                             }else{
                                 // Pawn push
                                 move_list.addMove(Move(from, to, piece, 0, CAPTURE));
@@ -977,9 +977,9 @@ class Chessboard{
                             // Pawn promotion
                             if(canPromote){
                                 move_list.addMove(Move(from, to, piece, q, 0));
+                                move_list.addMove(Move(from, to, piece, r, 0));
                                 move_list.addMove(Move(from, to, piece, b, 0));
                                 move_list.addMove(Move(from, to, piece, n, 0));
-                                move_list.addMove(Move(from, to, piece, r, 0));
                             }else{
                                 // Pawn push
                                 move_list.addMove(Move(from, to, piece, 0, 0));
@@ -997,9 +997,9 @@ class Chessboard{
 
                             if(canPromote){
                                 move_list.addMove(Move(from, to, piece, q, CAPTURE));
+                                move_list.addMove(Move(from, to, piece, r, CAPTURE));
                                 move_list.addMove(Move(from, to, piece, b, CAPTURE));
                                 move_list.addMove(Move(from, to, piece, n, CAPTURE));
-                                move_list.addMove(Move(from, to, piece, r, CAPTURE));
                             }else{
                                 // Pawn push
                                 move_list.addMove(Move(from, to, piece, 0, CAPTURE));
@@ -1654,15 +1654,23 @@ static int mvv_lva[12][12] = {
 	100, 200, 300, 400, 500, 600,  100, 200, 300, 400, 500, 600
 };
 
-// killer moves
-Move killer_moves[2][64];
+// max ply
+constexpr int MAX_PLY = 64;
 
-// history moves
+// killer moves [id][ply]
+Move killer_moves[2][MAX_PLY];
+
+// history moves [piece][square]
 int history_moves[12][64] = {0};
+
+// PV length [ply]
+int pv_length[MAX_PLY];
+
+// PV table [ply][ply]
+Move pv_table[MAX_PLY][MAX_PLY];
 
 int ply = 0;
 int nodes = 0;
-Move best_move;
 
 // Scores a move based off of mvv lva lookup table
 static inline int scoreMove(Move move, BoardContainer boards){
@@ -1794,8 +1802,17 @@ static inline int quiescence(int alpha, int beta, BoardContainer boards){
 
 // negamax alpha beta search
 static inline int negamax(int alpha, int beta, int depth, BoardContainer boards){
+    // init pv length
+    pv_length[ply] = ply;
+
+    // escape condition
     if(depth == 0){
         return quiescence(alpha, beta, boards);
+    }
+
+    // ply overflow handling
+    if(ply > MAX_PLY - 1){
+        return evaluate(boards);
     }
 
     nodes++;
@@ -1808,10 +1825,6 @@ static inline int negamax(int alpha, int beta, int depth, BoardContainer boards)
     }
 
     int legal_moves = 0;
-
-    Move best_sofar;
-
-    int old_alpha = alpha;
 
     MoveList move_list;
 
@@ -1839,24 +1852,34 @@ static inline int negamax(int alpha, int beta, int depth, BoardContainer boards)
 
         // fail hard beta cutoff, node fails high
         if(score >= beta){
-            // store killer moves
-            killer_moves[1][ply] = killer_moves[0][ply];
-            killer_moves[0][ply] = move_list.moves[ind];
+            if((move_list.moves[ind].flags & CAPTURE) == 0){
+                // store killer moves
+                killer_moves[1][ply] = killer_moves[0][ply];
+                killer_moves[0][ply] = move_list.moves[ind];
+            }
 
             return beta;
         }
 
         // fount a better move
         if(score > alpha){
-            history_moves[move_list.moves[ind].piece][move_list.moves[ind].to] += depth;
+            if((move_list.moves[ind].flags & CAPTURE) == 0){
+                // store history moves
+                history_moves[move_list.moves[ind].piece][move_list.moves[ind].to] += depth;
+            }
 
             // PV node
             alpha = score;
 
-            if(ply == 0){
-                // Associate best move with best score
-                best_sofar = move_list.moves[ind];
+            // PV move
+            pv_table[ply][ply] = move_list.moves[ind];
+
+            for(int next_ply = ply + 1; next_ply < pv_length[ply + 1]; next_ply++){
+                // copy move from deeper ply into current ply's line
+                pv_table[ply][next_ply] = pv_table[ply + 1][next_ply];
             }
+
+            pv_length[ply] = pv_length[ply + 1];
         }
     }
 
@@ -1868,21 +1891,58 @@ static inline int negamax(int alpha, int beta, int depth, BoardContainer boards)
         }
     }
 
-    if(old_alpha != alpha){
-        best_move = best_sofar;
-    }
-
     // node fails low
     return alpha;
 }
 
 void searchPosition(int depth, BoardContainer boards){
-    int score = negamax(-50000, 50000, depth, boards);
+    int score;
 
-    std::cout << "info score cp " << score << " depth " << depth << " nodes " << nodes << std::endl;
+    nodes = 0;
+
+    // clear pv, killer, and history
+    memset(killer_moves, 0, sizeof(killer_moves));
+    memset(history_moves, 0, sizeof(history_moves));
+    memset(pv_table, 0, sizeof(pv_table));
+    memset(pv_length, 0, sizeof(pv_length));
+    
+    // iterative deepening
+    for(int current_depth = 1; current_depth <= depth; current_depth++){
+        nodes = 0;
+
+        score = negamax(-50000, 50000, current_depth, boards);
+
+        std::cout << "info score cp " << score << " depth " << current_depth << " nodes " << nodes << " pv ";
+        for(int count = 0; count < pv_length[0]; count++){
+            pv_table[0][count].print();
+            std::cout << " ";
+        }
+        std::cout << std::endl;
+    }
 
     std::cout << "bestmove ";
-    best_move.print();
+    pv_table[0][0].print();
+    std::cout << std::endl;
+
+    nodes = 0;
+
+    // clear pv, killer, and history
+    memset(killer_moves, 0, sizeof(killer_moves));
+    memset(history_moves, 0, sizeof(history_moves));
+    memset(pv_table, 0, sizeof(pv_table));
+    memset(pv_length, 0, sizeof(pv_length));
+
+    score = negamax(-50000, 50000, depth, boards);
+
+    std::cout << "info score cp " << score << " depth " << depth << " nodes " << nodes << " pv ";
+    for(int count = 0; count < pv_length[0]; count++){
+        pv_table[0][count].print();
+        std::cout << " ";
+    }
+    std::cout << std::endl;
+
+    std::cout << "bestmove ";
+    pv_table[0][0].print();
     std::cout << std::endl;
 }
 
@@ -2051,7 +2111,7 @@ int main(){
     if(debug){
         BoardContainer boards = BoardContainer(tricky_position);
         boards.board.printChessboard();
-        searchPosition(5, boards);
+        searchPosition(6, boards);
     }else{
         uciLoop();
     }
