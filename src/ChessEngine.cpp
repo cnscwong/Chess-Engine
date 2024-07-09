@@ -1699,9 +1699,6 @@ static inline int scoreMove(Move move, BoardContainer boards){
         if(pv_table[0][ply] == move){
             // clear score pv flag
             score_pv = 0;
-            std::cout << "current PV move: ";
-            move.print();
-            std::cout << " ply: " << ply << std::endl;
 
             return 20000;
         }
@@ -1835,6 +1832,9 @@ static inline int quiescence(int alpha, int beta, BoardContainer boards){
 
 // negamax alpha beta search
 static inline int negamax(int alpha, int beta, int depth, BoardContainer boards){
+    // define find PV node variable
+    int found_pv = 0;
+
     // init pv length
     pv_length[ply] = ply;
 
@@ -1882,7 +1882,19 @@ static inline int negamax(int alpha, int beta, int depth, BoardContainer boards)
 
         legal_moves++;
 
-        int score = -negamax(-beta, -alpha, depth - 1, boards);
+        // static evaluation score
+        int score;
+
+        // principle variation search - hit a pv node previously
+        if(found_pv){
+            score = -negamax(-alpha - 1, -alpha, depth - 1, boards);
+
+            if(score > alpha && score < beta){ // failure
+                score = -negamax(-beta, -alpha, depth - 1, boards);
+            }
+        }else{// normal alpha beta algo
+            score = -negamax(-beta, -alpha, depth - 1, boards);
+        }
 
         ply--;
 
@@ -1908,6 +1920,9 @@ static inline int negamax(int alpha, int beta, int depth, BoardContainer boards)
 
             // PV node
             alpha = score;
+
+            // set found pv flag
+            found_pv = 1;
 
             // PV move
             pv_table[ply][ply] = move_list.moves[ind];
@@ -1948,9 +1963,7 @@ void searchPosition(int depth, BoardContainer boards){
     memset(pv_length, 0, sizeof(pv_length));
     
     // iterative deepening
-    for(int current_depth = 1; current_depth <= depth; current_depth++){
-        nodes = 0;
-        
+    for(int current_depth = 1; current_depth <= depth; current_depth++){        
         // set follow_pv flag
         follow_pv = 1;
 
@@ -1963,30 +1976,6 @@ void searchPosition(int depth, BoardContainer boards){
         }
         std::cout << std::endl;
     }
-
-    std::cout << "bestmove ";
-    pv_table[0][0].print();
-    std::cout << std::endl;
-
-    // reset nodes, and follow PV flags
-    nodes = 0;
-    follow_pv = 0;
-    score_pv = 0;
-
-    // clear pv, killer, and history
-    memset(killer_moves, 0, sizeof(killer_moves));
-    memset(history_moves, 0, sizeof(history_moves));
-    memset(pv_table, 0, sizeof(pv_table));
-    memset(pv_length, 0, sizeof(pv_length));
-
-    score = negamax(-50000, 50000, depth, boards);
-
-    std::cout << "info score cp " << score << " depth " << depth << " nodes " << nodes << " pv ";
-    for(int count = 0; count < pv_length[0]; count++){
-        pv_table[0][count].print();
-        std::cout << " ";
-    }
-    std::cout << std::endl;
 
     std::cout << "bestmove ";
     pv_table[0][0].print();
