@@ -1830,6 +1830,9 @@ static inline int quiescence(int alpha, int beta, BoardContainer boards){
     return alpha;
 }
 
+const int full_depth_moves = 4;
+const int reduction_limit = 3;
+
 // negamax alpha beta search
 static inline int negamax(int alpha, int beta, int depth, BoardContainer boards){
     // define find PV node variable
@@ -1870,6 +1873,9 @@ static inline int negamax(int alpha, int beta, int depth, BoardContainer boards)
 
     sortMoves(move_list, boards);
 
+    // number of moves searched in a move list
+    int moves_searched = 0;
+
     for(int ind = 0; ind < move_list.count; ind++){
         boards.saveBoard();
 
@@ -1893,12 +1899,33 @@ static inline int negamax(int alpha, int beta, int depth, BoardContainer boards)
                 score = -negamax(-beta, -alpha, depth - 1, boards);
             }
         }else{// normal alpha beta algo
-            score = -negamax(-beta, -alpha, depth - 1, boards);
+            if(moves_searched == 0){ // full depth search
+                score = -negamax(-beta, -alpha, depth - 1, boards);
+            }else{ // Late move reduction
+                // Checks if lmr is possible
+                if((moves_searched >= full_depth_moves) && (depth >= reduction_limit) && (in_check == 0) && ((move_list.moves[ind].flags & CAPTURE) == 0) && (move_list.moves[ind].promotedPiece == P)){
+                    score = -negamax(-alpha - 1, -alpha, depth - 2, boards);
+                }else{
+                    score = alpha + 1;
+                }
+
+                // found better move during LMR, re-search at normal depth with lmr alpha beta
+                if(score > alpha){
+                    score = -negamax(-alpha - 1, -alpha, depth - 1, boards);
+
+                    // LMR fails, re-search at normal depth with normal alpha beta
+                    if((score > alpha) && (score < beta)){
+                        score = -negamax(-beta, -alpha, depth - 1, boards);
+                    }
+                }
+            }
         }
 
         ply--;
 
         boards.restoreBoard();
+
+        moves_searched++;
 
         // fail hard beta cutoff, node fails high
         if(score >= beta){
@@ -1911,7 +1938,7 @@ static inline int negamax(int alpha, int beta, int depth, BoardContainer boards)
             return beta;
         }
 
-        // fount a better move
+        // found a better move
         if(score > alpha){
             if((move_list.moves[ind].flags & CAPTURE) == 0){
                 // store history moves
