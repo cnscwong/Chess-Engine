@@ -1837,6 +1837,9 @@ const int reduction_limit = 3;
 static inline int negamax(int alpha, int beta, int depth, BoardContainer boards){
     // define find PV node variable
     int found_pv = 0;
+    
+    // static evaluation score
+    int score;
 
     // init pv length
     pv_length[ply] = ply;
@@ -1861,6 +1864,26 @@ static inline int negamax(int alpha, int beta, int depth, BoardContainer boards)
     }
 
     int legal_moves = 0;
+
+    // null move pruning
+    if(depth >= 3 && in_check == 0 && ply){
+        boards.saveBoard();
+
+        // Give enemy an extra move
+        boards.board.side ^= 1; 
+
+        boards.board.enpassant = no_sq;
+
+        // Find beta cutoffs within depth - 1 - R moves
+        score = -negamax(-beta, -beta + 1, depth - 1 - 2, boards);
+
+        boards.restoreBoard();
+
+        // beta cutoff
+        if(score >= beta){
+            return beta;
+        }
+    }
 
     MoveList move_list;
 
@@ -1887,9 +1910,6 @@ static inline int negamax(int alpha, int beta, int depth, BoardContainer boards)
         }
 
         legal_moves++;
-
-        // static evaluation score
-        int score;
 
         // principle variation search - hit a pv node previously
         if(found_pv){
@@ -1989,12 +2009,24 @@ void searchPosition(int depth, BoardContainer boards){
     memset(pv_table, 0, sizeof(pv_table));
     memset(pv_length, 0, sizeof(pv_length));
     
+    int alpha = -50000;
+    int beta = 50000;
+
     // iterative deepening
     for(int current_depth = 1; current_depth <= depth; current_depth++){        
         // set follow_pv flag
         follow_pv = 1;
 
-        score = negamax(-50000, 50000, current_depth, boards);
+        score = negamax(alpha, beta, current_depth, boards);
+
+        if(score <= alpha || score >= beta){
+            alpha = -50000;
+            beta = 50000;
+            continue;
+        }
+
+        alpha = score - 50;
+        beta = score + 50;
 
         std::cout << "info score cp " << score << " depth " << current_depth << " nodes " << nodes << " pv ";
         for(int count = 0; count < pv_length[0]; count++){
@@ -2174,7 +2206,7 @@ int main(){
     if(debug){
         BoardContainer boards = BoardContainer(tricky_position);
         boards.board.printChessboard();
-        searchPosition(6, boards);
+        searchPosition(7, boards);
     }else{
         uciLoop();
     }
