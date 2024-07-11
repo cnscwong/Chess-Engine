@@ -153,6 +153,71 @@ void printBitBoard(Bitboard board){
 }
 
 /*----------------------------------*/
+/*          RANDOM NUMBERS          */
+/*----------------------------------*/
+
+unsigned int randNum = 1804289383;
+
+// 32 bit random number generator
+unsigned int random32(){
+    unsigned int num = randNum;
+
+    num ^= num << 13;
+    num ^= num >> 17;
+    num ^= num << 5;
+
+    randNum = num;
+    
+    return num;
+}
+
+//64 bit random number generator
+unsigned long long random64(){
+    unsigned long long u1, u2, u3, u4;
+    
+    u1 = (unsigned long long)(random32()) & 0xFFFF;
+    u2 = (unsigned long long)(random32()) & 0xFFFF;
+    u3 = (unsigned long long)(random32()) & 0xFFFF;
+    u4 = (unsigned long long)(random32()) & 0xFFFF;
+
+    return u1 | (u2 << 16) | (u3 << 32) | (u4 << 48);
+}
+
+/*----------------------------------*/
+/*         ZOBRIST HASHING          */
+/*----------------------------------*/
+
+// random hash keys
+// random piece hash keys[piece][square]
+Bitboard piece_keys[12][64];
+// random enpassant keys[square]
+Bitboard enpassant_keys[64];
+// random castling keys
+Bitboard castle_keys[16];
+// random side key
+Bitboard side_key;
+
+void init_random_keys(){
+    randNum = 1804289383;
+
+    for(int i = 0; i < 12; i++){
+        for(int j = 0; j < 64; j++){
+            piece_keys[i][j] = random64();
+        }
+    }
+
+    for(int i = 0; i < 64; i++){
+        enpassant_keys[i] = random64();
+    }
+
+    for(int i = 0; i < 16; i++){
+        castle_keys[i] = random64();
+    }
+
+    side_key = random64();
+}
+
+/*----------------------------------*/
 /*           TIME CONTROL           */
 /*----------------------------------*/
 
@@ -590,33 +655,6 @@ Bitboard mapOccupancy(int index, int bits, Bitboard mask){
     }
 
     return map;
-}
-
-unsigned int randNum = 1804289383;
-
-// 32 bit random number generator
-unsigned int random32(){
-    unsigned int num = randNum;
-
-    num ^= num << 13;
-    num ^= num >> 17;
-    num ^= num << 5;
-
-    randNum = num;
-    
-    return num;
-}
-
-//64 bit random number generator
-unsigned long long random64(){
-    unsigned long long u1, u2, u3, u4;
-    
-    u1 = (unsigned long long)(random32()) & 0xFFFF;
-    u2 = (unsigned long long)(random32()) & 0xFFFF;
-    u3 = (unsigned long long)(random32()) & 0xFFFF;
-    u4 = (unsigned long long)(random32()) & 0xFFFF;
-
-    return u1 | (u2 << 16) | (u3 << 32) | (u4 << 48);
 }
 
 // macro to generate magic number candidates
@@ -1479,15 +1517,6 @@ class BoardContainer{
         }
     }
 };
-
-/*----------------------------------*/
-/*          INITIALIZATION          */
-/*----------------------------------*/
-
-void init(){
-    initLeaperAttacks();
-    initSliderAttacks();
-}
 
 /*----------------------------------*/
 /*        PERFORMANCE TESTING       */
@@ -2416,18 +2445,30 @@ void uciLoop(){
 }
 
 /*----------------------------------*/
+/*          INITIALIZATION          */
+/*----------------------------------*/
+
+void init(){
+    initLeaperAttacks();
+    initSliderAttacks();
+    init_random_keys();
+}
+
+/*----------------------------------*/
 /*               MAIN               */
 /*----------------------------------*/
 
 int main(){
     init();
 
-    int debug = 0;
+    int debug = 1;
 
     if(debug){
         BoardContainer boards = BoardContainer(tricky_position);
         boards.board.printChessboard();
-        searchPosition(7, boards);
+        // searchPosition(7, boards);
+
+        init_random_keys();
     }else{
         uciLoop();
     }
