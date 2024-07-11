@@ -930,7 +930,7 @@ class Chessboard{
     int enpassant = no_sq;
     int castle = 0;
 
-    Bitboard hashKey;
+    Bitboard hashKey = 0ULL;
 
     // Default constructor initializes chessboard to starting position
     Chessboard(){
@@ -960,7 +960,7 @@ class Chessboard{
         enpassant = no_sq;
         castle = wKingside | wQueenside | bKingside | bQueenside;
 
-        hashKey =  generateHashKey();
+        hashKey = generateHashKey();
     }
 
     // Chessboard initializer with a FEN string
@@ -1877,7 +1877,7 @@ static inline int evaluate(BoardContainer boards){
 }
 
 /*----------------------------------*/
-/*              SEARCH              */
+/*         SEARCH VARIABLES         */
 /*----------------------------------*/
 
 // Most Valuable Victim, Least Valuable Attacker lookup table [attacker][victim]
@@ -1917,6 +1917,48 @@ int follow_pv, score_pv;
 
 int ply = 0;
 int nodes = 0;
+
+/*----------------------------------*/
+/*      TRANSPOSITION TABLES        */
+/*----------------------------------*/
+
+// hash table size
+#define HASH_SIZE 0x400000
+
+// hash flags for transposition table implementation
+#define hashFlagExact 0 // PV node (score > alpha)
+#define hashFlagAlpha 1 // fail low(score <= alpha)
+#define hashFlagBeta 2  // fail high(score >= beta)
+
+class transpositionTable{
+    public:
+    Bitboard hashKey = 0ULL;
+    int depth = 0;
+    int hashFlag = 0;   // flag the type of node
+    int score = 0;
+
+    transpositionTable(){
+        hashKey = 0ULL;
+        depth = 0;
+        hashFlag = 0;
+        score = 0;
+    }
+};
+
+transpositionTable hashTable[HASH_SIZE];
+
+void clearHashTable(){
+    for(int index = 0; index < HASH_SIZE; index++){
+        hashTable[index].hashKey = 0ULL;
+        hashTable[index].depth = 0;
+        hashTable[index].hashFlag = 0;
+        hashTable[index].score = 0;
+    }
+}
+
+/*----------------------------------*/
+/*        MOVE SCORE/ORDERING       */
+/*----------------------------------*/
 
 // enable PV move scoring
 static inline void enablePVScoring(MoveList move_list){
@@ -2018,6 +2060,10 @@ static inline int sortMoves(MoveList &move_list, BoardContainer boards){
 
     return 0;
 }
+
+/*----------------------------------*/
+/*              SEARCH              */
+/*----------------------------------*/
 
 // quiescence search
 static inline int quiescence(int alpha, int beta, BoardContainer boards){
@@ -2556,7 +2602,8 @@ int main(){
         BoardContainer boards = BoardContainer(start_position);
         boards.board.printChessboard();
         // searchPosition(7, boards);
-        perftTest(6, boards);
+        clearHashTable();
+        // perftTest(6, boards);
     }else{
         uciLoop();
     }

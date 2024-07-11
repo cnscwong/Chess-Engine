@@ -10,3 +10,8 @@ The chessboard is represented by a 64-bit unsigned integer (bitboard) where each
 In order to generate legal moves, the engine needs to know what moves for each piece are actually possible. To avoid recalculating the moves of a piece in the same position multiple times, precalculated move/attack lookup tables are generated for each piece and square beforehand so possible moves takes O(1) time.
 
 ## Move Generation
+
+## Resources
+https://web.archive.org/web/20071026090003/http://www.brucemo.com/compchess/programming/index.htm
+https://www.chessprogramming.org/Main_Page
+https://www.youtube.com/@chessprogramming591/featured
