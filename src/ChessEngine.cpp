@@ -3,6 +3,7 @@
 #include <string>
 #include <cstring>
 #include <map>
+#include <unistd.h>
 #include <windows.h>
 #include <assert.h>
 #include <bits/stdc++.h>
@@ -149,6 +150,135 @@ void printBitBoard(Bitboard board){
     }
     std::cout << std::endl;
     std::cout << "    A B C D E F G H\n\nULL:" << board << std::endl << std::endl;
+}
+
+/*----------------------------------*/
+/*           TIME CONTROL           */
+/*----------------------------------*/
+
+// BlueFeverSoftware implementation
+
+bool quit = false;
+
+// UCI movestogo move counter
+int movestogo = 30;
+
+// UCI movetime command time counter
+int movetime = -1;
+
+// UCI time command holder (ms)
+int timeTracker = -1;
+
+// UCI inc command's time increment holder
+int inc = 0;
+
+//UCI starttime command time holder
+int starttime = 0;
+
+// UCI stoptime command time holder
+int stoptime = 0;
+
+// variable to flag time control availability
+bool timeset = false;
+
+// variable to flag when the time is up
+bool stopped = false;
+
+// Gets current ms time
+int get_time_ms(){
+    return GetTickCount();
+}
+
+int input_waiting(){
+    static int init = 0, pipe;
+    static HANDLE inh;
+    DWORD dw;
+
+    if (!init)
+    {
+        init = 1;
+        inh = GetStdHandle(STD_INPUT_HANDLE);
+        pipe = !GetConsoleMode(inh, &dw);
+        if (!pipe)
+        {
+            SetConsoleMode(inh, dw & ~(ENABLE_MOUSE_INPUT|ENABLE_WINDOW_INPUT));
+            FlushConsoleInputBuffer(inh);
+        }
+    }
+    
+    if (pipe)
+    {
+        if (!PeekNamedPipe(inh, NULL, 0, NULL, &dw, NULL)) return 1;
+        return dw;
+    }
+    
+    else
+    {
+        GetNumberOfConsoleInputEvents(inh, &dw);
+        return dw <= 1 ? 0 : dw;
+    }
+}
+
+// read GUI/user input
+void read_input()
+{
+    // bytes to read holder
+    int bytes;
+    
+    // GUI/user input
+    char input[256] = "", *endc;
+
+    // "listen" to STDIN
+    if (input_waiting())
+    {
+        // tell engine to stop calculating
+        stopped = true;
+        
+        // loop to read bytes from STDIN
+        do
+        {
+            // read bytes from STDIN
+            bytes=read(fileno(stdin), input, 256);
+        }
+        
+        // until bytes available
+        while (bytes < 0);
+        
+        // searches for the first occurrence of '\n'
+        endc = strchr(input,'\n');
+        
+        // if found new line set value at pointer to 0
+        if (endc) *endc=0;
+        
+        // if input is available
+        if (strlen(input) > 0)
+        {
+            // match UCI "quit" command
+            if (!strncmp(input, "quit", 4))
+            {
+                // tell engine to terminate exacution    
+                quit = true;
+            }
+
+            // // match UCI "stop" command
+            else if (!strncmp(input, "stop", 4))    {
+                // tell engine to terminate exacution
+                quit = true;
+            }
+        }   
+    }
+}
+
+// a bridge function to interact between search and GUI input
+static void communicate() {
+	// if time is up break here
+    if(timeset && get_time_ms() > stoptime) {
+		// tell engine to stop calculating
+		stopped = true;
+	}
+	
+    // read GUI input
+	read_input();
 }
 
 /*----------------------------------*/
@@ -1363,11 +1493,6 @@ void init(){
 /*        PERFORMANCE TESTING       */
 /*----------------------------------*/
 
-// Gets current ms time
-int get_time_ms(){
-    return GetTickCount();
-}
-
 const int perftDepth = 5;
 long node_count[perftDepth + 1] = {0};
 
@@ -1778,6 +1903,11 @@ static inline int sortMoves(MoveList &move_list, BoardContainer boards){
 
 // quiescence search
 static inline int quiescence(int alpha, int beta, BoardContainer boards){
+    // Check gui input every 2047 nodes
+    if((nodes & 2047) == 0){
+        communicate();
+    }
+    
     nodes++;
 
     int eval = evaluate(boards);
@@ -1815,6 +1945,11 @@ static inline int quiescence(int alpha, int beta, BoardContainer boards){
 
         boards.restoreBoard();
 
+        // time is up
+        if(stopped){
+            return 0;
+        }
+
         // fail hard beta cutoff, node fails high
         if(score >= beta){
             return beta;
@@ -1835,6 +1970,11 @@ const int reduction_limit = 3;
 
 // negamax alpha beta search
 static inline int negamax(int alpha, int beta, int depth, BoardContainer boards){    
+    // Check gui input every 2047 nodes
+    if((nodes & 2047) == 0){
+        communicate();
+    }
+    
     // static evaluation score
     int score;
 
@@ -1875,6 +2015,11 @@ static inline int negamax(int alpha, int beta, int depth, BoardContainer boards)
         score = -negamax(-beta, -beta + 1, depth - 1 - 2, boards);
 
         boards.restoreBoard();
+
+        // time is up
+        if(stopped){
+            return 0;
+        }
 
         // beta cutoff
         if(score >= beta){
@@ -1932,6 +2077,11 @@ static inline int negamax(int alpha, int beta, int depth, BoardContainer boards)
 
         boards.restoreBoard();
 
+        // time is up
+        if(stopped){
+            return 0;
+        }
+
         moves_searched++;
 
         // fail hard beta cutoff, node fails high
@@ -1986,6 +2136,7 @@ void searchPosition(int depth, BoardContainer boards){
     nodes = 0;
     follow_pv = 0;
     score_pv = 0;
+    stopped = false;
 
     // clear pv, killer, and history
     memset(killer_moves, 0, sizeof(killer_moves));
@@ -1998,6 +2149,11 @@ void searchPosition(int depth, BoardContainer boards){
 
     // iterative deepening
     for(int current_depth = 1; current_depth <= depth; current_depth++){        
+        // if time is up
+        if(stopped){
+            break;
+        }
+        
         // set follow_pv flag
         follow_pv = 1;
 
@@ -2104,18 +2260,99 @@ void parsePosition(std::string command){
     boardState.board.printChessboard();
 }
 
+// BlueFeverSoftware implementation
 // parse UCI go command
-void parseGo(std::string command){
+void parseGo(std::string command)
+{
+    // init parameters
     int depth = -1;
-    int ind = command.find("depth");
 
-    if(ind != -1){
-        ind += 6;
-        depth = atoi(&command[ind]);
-    }else{
-        depth = 3;
+    // init argument
+    char *argument = NULL;
+
+    // infinite search
+    if ((argument = strstr(&command[0],"infinite"))) {}
+
+    // match UCI "binc" command
+    if ((argument = strstr(&command[0],"binc")) && boardState.board.side == Black){
+        // parse black time increment
+        inc = atoi(argument + 5);
+    }
+    // match UCI "winc" command
+    if ((argument = strstr(&command[0],"winc")) && boardState.board.side == White){
+        // parse white time increment
+        inc = atoi(argument + 5);
     }
 
+    // match UCI "wtime" command
+    if ((argument = strstr(&command[0],"wtime")) && boardState.board.side == White){
+        // parse white time limit
+        timeTracker = atoi(argument + 6);
+    }
+
+    // match UCI "btime" command
+    if ((argument = strstr(&command[0],"btime")) && boardState.board.side == Black){
+        // parse black time limit
+        timeTracker = atoi(argument + 6);
+    }
+
+    // match UCI "movestogo" command
+    if ((argument = strstr(&command[0],"movestogo"))){
+        // parse number of moves to go
+        movestogo = atoi(argument + 10);
+    }
+
+    // match UCI "movetime" command
+    if ((argument = strstr(&command[0],"movetime"))){
+        // parse amount of time allowed to spend to make a move
+        movetime = atoi(argument + 9);
+    }
+
+    // match UCI "depth" command
+    if ((argument = strstr(&command[0],"depth"))){
+        // parse search depth
+        depth = atoi(argument + 6);
+    }
+
+    // if move time is not available
+    if(movetime != -1)
+    {
+        // set time equal to move time
+        timeTracker = movetime;
+
+        // set moves to go to 1
+        movestogo = 1;
+    }
+
+    // init start time
+    starttime = get_time_ms();
+
+    // init search depth
+    depth = depth;
+
+    // if time control is available
+    if(timeTracker != -1)
+    {
+        // flag we're playing with time control
+        timeset = 1;
+
+        // set up timing
+        timeTracker /= movestogo;
+        timeTracker -= 50;
+        stoptime = starttime + timeTracker + inc;
+    }
+
+    // if depth is not available
+    if(depth == -1){
+        // set depth to 64 plies (takes ages to complete...)
+        depth = 64;
+    }
+
+    // print debug info
+    printf("time:%d start:%d stop:%d depth:%d timeset:%d\n",
+    timeTracker, starttime, stoptime, depth, timeset);
+
+    // search position
     searchPosition(depth, boardState);
 }
 
@@ -2164,7 +2401,7 @@ void uciLoop(){
         }
         
         // UCI quit command
-        if(strncmp(&input[0], "quit", 2) == 0){
+        if(strncmp(&input[0], "quit", 4) == 0){
             break;
         }
 
@@ -2185,7 +2422,7 @@ void uciLoop(){
 int main(){
     init();
 
-    int debug = 1;
+    int debug = 0;
 
     if(debug){
         BoardContainer boards = BoardContainer(tricky_position);
