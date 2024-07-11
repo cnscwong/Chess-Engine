@@ -1834,10 +1834,7 @@ const int full_depth_moves = 4;
 const int reduction_limit = 3;
 
 // negamax alpha beta search
-static inline int negamax(int alpha, int beta, int depth, BoardContainer boards){
-    // define find PV node variable
-    int found_pv = 0;
-    
+static inline int negamax(int alpha, int beta, int depth, BoardContainer boards){    
     // static evaluation score
     int score;
 
@@ -1910,33 +1907,23 @@ static inline int negamax(int alpha, int beta, int depth, BoardContainer boards)
         }
 
         legal_moves++;
-
-        // principle variation search - hit a pv node previously
-        if(found_pv){
-            score = -negamax(-alpha - 1, -alpha, depth - 1, boards);
-
-            if(score > alpha && score < beta){ // failure
-                score = -negamax(-beta, -alpha, depth - 1, boards);
+        // normal alpha beta algo
+        if(moves_searched == 0){ // full depth search
+            score = -negamax(-beta, -alpha, depth - 1, boards);
+        }else{ // Late move reduction
+            // Checks if lmr is possible
+            if((moves_searched >= full_depth_moves) && (depth >= reduction_limit) && (in_check == 0) && ((move_list.moves[ind].flags & CAPTURE) == 0) && (move_list.moves[ind].promotedPiece == P)){
+                score = -negamax(-alpha - 1, -alpha, depth - 2, boards);
+            }else{
+                score = alpha + 1;
             }
-        }else{// normal alpha beta algo
-            if(moves_searched == 0){ // full depth search
-                score = -negamax(-beta, -alpha, depth - 1, boards);
-            }else{ // Late move reduction
-                // Checks if lmr is possible
-                if((moves_searched >= full_depth_moves) && (depth >= reduction_limit) && (in_check == 0) && ((move_list.moves[ind].flags & CAPTURE) == 0) && (move_list.moves[ind].promotedPiece == P)){
-                    score = -negamax(-alpha - 1, -alpha, depth - 2, boards);
-                }else{
-                    score = alpha + 1;
-                }
 
-                // found better move during LMR, re-search at normal depth with lmr alpha beta
-                if(score > alpha){
-                    score = -negamax(-alpha - 1, -alpha, depth - 1, boards);
+            // principal variation search
+            if(score > alpha){
+                score = -negamax(-alpha - 1, -alpha, depth - 1, boards);
 
-                    // LMR fails, re-search at normal depth with normal alpha beta
-                    if((score > alpha) && (score < beta)){
-                        score = -negamax(-beta, -alpha, depth - 1, boards);
-                    }
+                if((score > alpha) && (score < beta)){
+                    score = -negamax(-beta, -alpha, depth - 1, boards);
                 }
             }
         }
@@ -1967,9 +1954,6 @@ static inline int negamax(int alpha, int beta, int depth, BoardContainer boards)
 
             // PV node
             alpha = score;
-
-            // set found pv flag
-            found_pv = 1;
 
             // PV move
             pv_table[ply][ply] = move_list.moves[ind];
