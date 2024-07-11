@@ -92,7 +92,7 @@ enum Direction {UP = -8, DOWN = 8, LEFT = -1, RIGHT = 1};
 enum Colour {White, Black, Both};
 
 // returns enemy side
-inline int getEnemy(int side){
+static inline int getEnemy(int side){
     return side^1;
 }
 
@@ -960,7 +960,7 @@ class Chessboard{
         enpassant = no_sq;
         castle = wKingside | wQueenside | bKingside | bQueenside;
 
-        generateHashKey();
+        hashKey =  generateHashKey();
     }
 
     // Chessboard initializer with a FEN string
@@ -1023,7 +1023,7 @@ class Chessboard{
 
         occupancies[Both] = occupancies[White] | occupancies[Black];
 
-        generateHashKey();
+        hashKey = generateHashKey();
     }
 
     /*----------------------------------*/
@@ -1376,15 +1376,15 @@ class Chessboard{
         std::cout << "Side: " << (side ? "Black":"White") << std::endl;
         std::cout << "En Passant: " << (enpassant != no_sq ? toSquare[enpassant]:"None") << std::endl;
         std::cout << "Castling: " << (castle & wKingside ? "WK":"-") << ", " << (castle & wQueenside ? "WQ":"-") << ", " << (castle & bKingside ? "BK":"-") << ", " << (castle & bQueenside ? "BQ":"-") << std::endl;
-        std::cout << "Hash key: " << std::hex << hashKey << std::endl << std::endl << std::endl;
+        std::cout << "Hash key: " << std::hex << hashKey << std::dec << std::endl << std::endl << std::endl;
     }
 
     /*----------------------------------*/
     /*          ZOBRIST HASHING         */
     /*----------------------------------*/
 
-    void generateHashKey(){
-        hashKey = 0ULL;
+    Bitboard generateHashKey(){
+        Bitboard key = 0ULL;
 
         Bitboard tempBoard;
 
@@ -1394,21 +1394,23 @@ class Chessboard{
             while(tempBoard){
                 int square = findLSB(tempBoard);
 
-                hashKey ^= piece_keys[piece][square];
+                key ^= piece_keys[piece][square];
 
                 clear(tempBoard, square);
             }
         }
 
         if(enpassant != no_sq){
-            hashKey ^= enpassant_keys[enpassant];
+            key ^= enpassant_keys[enpassant];
         }
 
-        hashKey ^= castle_keys[castle];
+        key ^= castle_keys[castle];
 
         if(side == Black){
-            hashKey ^= side_key;
+            key ^= side_key;
         }
+
+        return key;
     }
 };
 
@@ -1463,10 +1465,17 @@ class BoardContainer{
         if(moveFlag == all){
             saveBoard();
 
+            // Changing piece boards
             clear(board.pieceBoards[move.piece], move.from);
             set(board.pieceBoards[move.piece], move.to);
+
+            // Changing occupancy boards
             clear(board.occupancies[board.side], move.from);
             set(board.occupancies[board.side], move.to);
+
+            // Changing hash key
+            board.hashKey ^= piece_keys[move.piece][move.from];
+            board.hashKey ^= piece_keys[move.piece][move.to];
 
             if(move.flags & CAPTURE){
                 int startInd, endInd;
@@ -1480,28 +1489,53 @@ class BoardContainer{
 
                 for(int piece = startInd; piece <= endInd; piece++){
                     if(getSquare(board.pieceBoards[piece], move.to)){
+                        // Remove captured piece from pieceBoard
                         clear(board.pieceBoards[piece], move.to);
+
+                        // Remove captured piece from hash key
+                        board.hashKey ^= piece_keys[piece][move.to];
                         break;
                     }
                 }
 
+                // Remove captured piece from occupancies
                 clear(board.occupancies[getEnemy(board.side)], move.to);
             }
 
             if(move.promotedPiece){
-                clear(board.pieceBoards[(isWhite) ? P:p], move.to);
+                if(isWhite){
+                    clear(board.pieceBoards[P], move.to);
+                    board.hashKey ^= piece_keys[P][move.to];
+                }else{
+                    clear(board.pieceBoards[p], move.to);
+                    board.hashKey ^= piece_keys[p][move.to];
+                }
+                
                 set(board.pieceBoards[move.promotedPiece], move.to);
+                board.hashKey ^= piece_keys[move.promotedPiece][move.to];
             }
 
             if(move.flags & ENPASSANT){
-                (isWhite) ? clear(board.pieceBoards[p], move.to + DOWN):clear(board.pieceBoards[P], move.to + UP);
-                (isWhite) ? clear(board.occupancies[Black], move.to + DOWN):clear(board.occupancies[White], move.to + UP);
+                if(isWhite){
+                    clear(board.pieceBoards[p], move.to + DOWN);
+                    clear(board.occupancies[Black], move.to + DOWN);
+                    board.hashKey ^= piece_keys[p][move.to + DOWN];
+                }else{
+                    clear(board.pieceBoards[P], move.to + UP);
+                    clear(board.occupancies[White], move.to + UP);
+                    board.hashKey ^= piece_keys[P][move.to + UP];
+                }
+            }
+
+            if(board.enpassant != no_sq){
+                board.hashKey ^= enpassant_keys[board.enpassant];
             }
 
             board.enpassant = no_sq;
 
             if(move.flags & DOUBLE_PUSH){
                 (isWhite) ? (board.enpassant = move.to + DOWN):(board.enpassant = move.to + UP);
+                board.hashKey ^= enpassant_keys[board.enpassant];
             }
 
             if(move.flags & CASTLE){
@@ -1511,34 +1545,50 @@ class BoardContainer{
                         set(board.pieceBoards[R], F1);
                         clear(board.occupancies[board.side], H1);
                         set(board.occupancies[board.side], F1);
+                        board.hashKey ^= piece_keys[R][H1];
+                        board.hashKey ^= piece_keys[R][F1];
                         break;
                     case(C1):
                         clear(board.pieceBoards[R], A1);
                         set(board.pieceBoards[R], D1);
                         clear(board.occupancies[board.side], A1);
                         set(board.occupancies[board.side], D1);
+                        board.hashKey ^= piece_keys[R][A1];
+                        board.hashKey ^= piece_keys[R][D1];
                         break;
                     case(G8):
                         clear(board.pieceBoards[r], H8);
                         set(board.pieceBoards[r], F8);
                         clear(board.occupancies[board.side], H8);
                         set(board.occupancies[board.side], F8);
+                        board.hashKey ^= piece_keys[r][H8];
+                        board.hashKey ^= piece_keys[r][F8];
                         break;
                     case(C8):
                         clear(board.pieceBoards[r], A8);
                         set(board.pieceBoards[r], D8);
                         clear(board.occupancies[board.side], A8);
                         set(board.occupancies[board.side], D8);
+                        board.hashKey ^= piece_keys[r][A8];
+                        board.hashKey ^= piece_keys[r][D8];
                         break;
                 }
             }
 
+            // Unhash the last castle state
+            board.hashKey ^= castle_keys[board.castle];
+
             board.castle &= castling_rights[move.from];
             board.castle &= castling_rights[move.to];
+
+            // Hash the new castle state
+            board.hashKey ^= castle_keys[board.castle];
 
             board.occupancies[Both] = board.occupancies[White] | board.occupancies[Black];
 
             board.side = getEnemy(board.side);
+
+            board.hashKey ^= side_key;
 
             if(board.isAttacked(!isWhite ? findLSB(board.pieceBoards[k]):findLSB(board.pieceBoards[K]), board.side)){
                 restoreBoard();
@@ -1614,7 +1664,7 @@ void perftTest(int depth, BoardContainer boards){
         boards.restoreBoard();
 
         std::cout << "Move: " << toSquare[move_list.moves[moveIndex].from] << toSquare[move_list.moves[moveIndex].to] << 
-        piecePromotion[move_list.moves[moveIndex].promotedPiece] << "   Nodes: " << nodesPerDriver << std::endl;
+        piecePromotion[move_list.moves[moveIndex].promotedPiece] << "   Nodes: " << std::dec << nodesPerDriver << std::endl;
     }
 
     std::cout << "\nDepth: " << depth << std::endl;
@@ -2503,9 +2553,10 @@ int main(){
     int debug = 1;
 
     if(debug){
-        BoardContainer boards = BoardContainer(tricky_position);
+        BoardContainer boards = BoardContainer(start_position);
         boards.board.printChessboard();
         // searchPosition(7, boards);
+        perftTest(6, boards);
     }else{
         uciLoop();
     }
