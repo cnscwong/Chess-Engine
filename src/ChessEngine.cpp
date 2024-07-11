@@ -184,7 +184,7 @@ unsigned long long random64(){
 }
 
 /*----------------------------------*/
-/*         ZOBRIST HASHING          */
+/*        ZOBRIST RANDOM KEYS       */
 /*----------------------------------*/
 
 // random hash keys
@@ -930,6 +930,8 @@ class Chessboard{
     int enpassant = no_sq;
     int castle = 0;
 
+    Bitboard hashKey;
+
     // Default constructor initializes chessboard to starting position
     Chessboard(){
         // Init white pieces
@@ -957,6 +959,8 @@ class Chessboard{
         side = White;
         enpassant = no_sq;
         castle = wKingside | wQueenside | bKingside | bQueenside;
+
+        generateHashKey();
     }
 
     // Chessboard initializer with a FEN string
@@ -1018,6 +1022,8 @@ class Chessboard{
         }
 
         occupancies[Both] = occupancies[White] | occupancies[Black];
+
+        generateHashKey();
     }
 
     /*----------------------------------*/
@@ -1369,7 +1375,40 @@ class Chessboard{
         std::cout << "\n    A B C D E F G H\n\n";
         std::cout << "Side: " << (side ? "Black":"White") << std::endl;
         std::cout << "En Passant: " << (enpassant != no_sq ? toSquare[enpassant]:"None") << std::endl;
-        std::cout << "Castling: " << (castle & wKingside ? "WK":"-") << ", " << (castle & wQueenside ? "WQ":"-") << ", " << (castle & bKingside ? "BK":"-") << ", " << (castle & bQueenside ? "BQ":"-") << std::endl << std::endl << std::endl;
+        std::cout << "Castling: " << (castle & wKingside ? "WK":"-") << ", " << (castle & wQueenside ? "WQ":"-") << ", " << (castle & bKingside ? "BK":"-") << ", " << (castle & bQueenside ? "BQ":"-") << std::endl;
+        std::cout << "Hash key: " << std::hex << hashKey << std::endl << std::endl << std::endl;
+    }
+
+    /*----------------------------------*/
+    /*          ZOBRIST HASHING         */
+    /*----------------------------------*/
+
+    void generateHashKey(){
+        hashKey = 0ULL;
+
+        Bitboard tempBoard;
+
+        for(int piece = P; piece <= k; piece++){
+            tempBoard = pieceBoards[piece];
+
+            while(tempBoard){
+                int square = findLSB(tempBoard);
+
+                hashKey ^= piece_keys[piece][square];
+
+                clear(tempBoard, square);
+            }
+        }
+
+        if(enpassant != no_sq){
+            hashKey ^= enpassant_keys[enpassant];
+        }
+
+        hashKey ^= castle_keys[castle];
+
+        if(side == Black){
+            hashKey ^= side_key;
+        }
     }
 };
 
@@ -2467,8 +2506,6 @@ int main(){
         BoardContainer boards = BoardContainer(tricky_position);
         boards.board.printChessboard();
         // searchPosition(7, boards);
-
-        init_random_keys();
     }else{
         uciLoop();
     }
