@@ -1925,6 +1925,8 @@ int nodes = 0;
 // hash table size
 #define HASH_SIZE 0x400000
 
+#define NOT_FOUND 100000
+
 // hash flags for transposition table implementation
 #define hashFlagExact 0 // PV node (score > alpha)
 #define hashFlagAlpha 1 // fail low(score <= alpha)
@@ -1954,6 +1956,41 @@ void clearHashTable(){
         hashTable[index].hashFlag = 0;
         hashTable[index].score = 0;
     }
+}
+
+static inline int readHashEntry(int alpha, int beta, int depth, Bitboard hashKey){
+    transpositionTable *hashEntry = &hashTable[hashKey % HASH_SIZE];
+
+    // if table entry matches current position
+    if(hashEntry->hashKey == hashKey){
+        if(hashEntry->depth >= depth){
+            // match PV node score
+            if(hashEntry->hashFlag == hashFlagExact){
+                return hashEntry->score;
+            }
+
+            // match fail-low score
+            if((hashEntry->hashFlag == hashFlagAlpha) && (hashEntry->score <= alpha)){
+                return alpha;
+            }
+
+            // match fail-high score
+            if((hashEntry->hashFlag == hashFlagBeta) && (hashEntry->score >= beta)){
+                return beta;
+            }
+        }
+    }
+
+    return NOT_FOUND;
+}
+
+static inline void storeHashEntry(int score, int depth, int hashFlag, Bitboard hashKey){
+    transpositionTable *hashEntry = &hashTable[hashKey % HASH_SIZE];
+
+    hashEntry->hashKey = hashKey;
+    hashEntry->depth = depth;
+    hashEntry->hashFlag = hashFlag;
+    hashEntry->score = score;
 }
 
 /*----------------------------------*/
@@ -2134,13 +2171,20 @@ const int reduction_limit = 3;
 
 // negamax alpha beta search
 static inline int negamax(int alpha, int beta, int depth, BoardContainer boards){    
+    // static evaluation score
+    int score;
+
+    int hashFlag = hashFlagAlpha;
+    
+    // check if move has already been searched (is in transposition table)
+    if((score = readHashEntry(alpha, beta, depth, boards.board.hashKey)) != NOT_FOUND){
+        return score;
+    }
+
     // Check gui input every 2047 nodes
     if((nodes & 2047) == 0){
         communicate();
     }
-    
-    // static evaluation score
-    int score;
 
     // init pv length
     pv_length[ply] = ply;
@@ -2172,6 +2216,12 @@ static inline int negamax(int alpha, int beta, int depth, BoardContainer boards)
 
         // Give enemy an extra move
         boards.board.side ^= 1; 
+        // Update hash key
+        boards.board.hashKey ^= side_key;
+
+        if(boards.board.enpassant != no_sq){
+            boards.board.hashKey ^= enpassant_keys[boards.board.enpassant];
+        }
 
         boards.board.enpassant = no_sq;
 
@@ -2250,6 +2300,8 @@ static inline int negamax(int alpha, int beta, int depth, BoardContainer boards)
 
         // fail hard beta cutoff, node fails high
         if(score >= beta){
+            storeHashEntry(beta, depth, hashFlagBeta, boards.board.hashKey);
+
             if((move_list.moves[ind].flags & CAPTURE) == 0){
                 // store killer moves
                 killer_moves[1][ply] = killer_moves[0][ply];
@@ -2261,6 +2313,8 @@ static inline int negamax(int alpha, int beta, int depth, BoardContainer boards)
 
         // found a better move
         if(score > alpha){
+            hashFlag = hashFlagExact;
+
             if((move_list.moves[ind].flags & CAPTURE) == 0){
                 // store history moves
                 history_moves[move_list.moves[ind].piece][move_list.moves[ind].to] += depth;
@@ -2289,6 +2343,8 @@ static inline int negamax(int alpha, int beta, int depth, BoardContainer boards)
         }
     }
 
+    storeHashEntry(alpha, depth, hashFlag, boards.board.hashKey);
+
     // node fails low
     return alpha;
 }
@@ -2307,6 +2363,9 @@ void searchPosition(int depth, BoardContainer boards){
     memset(history_moves, 0, sizeof(history_moves));
     memset(pv_table, 0, sizeof(pv_table));
     memset(pv_length, 0, sizeof(pv_length));
+
+    // clear hash table
+    clearHashTable();
     
     int alpha = -50000;
     int beta = 50000;
@@ -2596,14 +2655,12 @@ void init(){
 int main(){
     init();
 
-    int debug = 1;
+    int debug = 0;
 
     if(debug){
-        BoardContainer boards = BoardContainer(start_position);
+        BoardContainer boards = BoardContainer("4k3/Q7/8/4K3/8/8/8/8 w - - ");
         boards.board.printChessboard();
-        // searchPosition(7, boards);
-        clearHashTable();
-        // perftTest(6, boards);
+        searchPosition(15, boards);
     }else{
         uciLoop();
     }
