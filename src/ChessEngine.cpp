@@ -2202,9 +2202,12 @@ static inline int negamax(int alpha, int beta, int depth, BoardContainer boards)
     int score;
 
     int hashFlag = hashFlagAlpha;
+
+    // Checks if current node is a pv node
+    bool isPV = (beta - alpha) > 1;
     
     // check if move has already been searched (is in transposition table)
-    if(ply && (score = readHashEntry(alpha, beta, depth, boards.board.hashKey)) != NOT_FOUND){
+    if(ply && (score = readHashEntry(alpha, beta, depth, boards.board.hashKey)) != NOT_FOUND && !isPV){
         return score;
     }
 
@@ -2419,7 +2422,15 @@ void searchPosition(int depth, BoardContainer boards){
         alpha = score - 50;
         beta = score + 50;
 
-        std::cout << "info score cp " << score << " depth " << current_depth << " nodes " << nodes << " pv ";
+        if (score > -mate_value && score < -mate_score){
+            std::cout << "info score mate " << (-(score + mate_value) / 2 - 1) << " depth " << current_depth << " nodes " << nodes << " pv ";
+        }else if (score > mate_score && score < mate_value){
+            std::cout << "info score mate " << ((mate_value - score) / 2 + 1) << " depth " << current_depth << " nodes " << nodes << " pv ";
+        }
+        else{
+            std::cout << "info score cp " << score << " depth " << current_depth << " nodes " << nodes << " pv ";
+        }
+
         for(int count = 0; count < pv_length[0]; count++){
             pv_table[0][count].print();
             std::cout << " ";
@@ -2636,6 +2647,8 @@ void uciLoop(){
         // UCI position command
         if(strncmp(&input[0], "position", 8) == 0){
             parsePosition(input);
+
+            clearHashTable();
             continue;
         }
 

@@ -11,7 +11,9 @@ In order to generate legal moves, the engine needs to know what moves for each p
 
 ## Move Generation
 
-## Resources
+## Acknowledgements
+https://www.youtube.com/@chessprogramming591/featured
+https://www.youtube.com/@BlueFeverSoft
 https://web.archive.org/web/20071026090003/http://www.brucemo.com/compchess/programming/index.htm
 https://www.chessprogramming.org/Main_Page
-https://www.youtube.com/@chessprogramming591/featured
+https://www.codeproject.com/Articles/5313417/Worlds-Fastest-Bitboard-Chess-Movegenerator
