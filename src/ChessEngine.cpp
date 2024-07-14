@@ -1880,6 +1880,11 @@ static inline int evaluate(BoardContainer boards){
 /*         SEARCH VARIABLES         */
 /*----------------------------------*/
 
+// "infinity" for alpha beta bounds
+#define infinity 50000
+#define mate_value 49000
+#define mate_score 48000
+
 // Most Valuable Victim, Least Valuable Attacker lookup table [attacker][victim]
 static int mvv_lva[12][12] = {
  	105, 205, 305, 405, 505, 605,  105, 205, 305, 405, 505, 605,
@@ -1964,18 +1969,28 @@ static inline int readHashEntry(int alpha, int beta, int depth, Bitboard hashKey
     // if table entry matches current position
     if(hashEntry->hashKey == hashKey){
         if(hashEntry->depth >= depth){
+            int score = hashEntry->score;
+
+            if(score < -mate_score){
+                score += ply;
+            }
+
+            if(score > mate_score){
+                score -= ply;
+            }
+
             // match PV node score
             if(hashEntry->hashFlag == hashFlagExact){
-                return hashEntry->score;
+                return score;
             }
 
             // match fail-low score
-            if((hashEntry->hashFlag == hashFlagAlpha) && (hashEntry->score <= alpha)){
+            if((hashEntry->hashFlag == hashFlagAlpha) && (score <= alpha)){
                 return alpha;
             }
 
             // match fail-high score
-            if((hashEntry->hashFlag == hashFlagBeta) && (hashEntry->score >= beta)){
+            if((hashEntry->hashFlag == hashFlagBeta) && (score >= beta)){
                 return beta;
             }
         }
@@ -1986,6 +2001,14 @@ static inline int readHashEntry(int alpha, int beta, int depth, Bitboard hashKey
 
 static inline void storeHashEntry(int score, int depth, int hashFlag, Bitboard hashKey){
     transpositionTable *hashEntry = &hashTable[hashKey % HASH_SIZE];
+
+    if(score < -mate_score){
+        score -= ply;
+    }
+
+    if(score > mate_score){
+        score += ply;
+    }
 
     hashEntry->hashKey = hashKey;
     hashEntry->depth = depth;
@@ -2111,6 +2134,10 @@ static inline int quiescence(int alpha, int beta, BoardContainer boards){
     
     nodes++;
 
+    if(ply > MAX_PLY - 1){
+        return evaluate(boards);
+    }
+
     int eval = evaluate(boards);
 
     // fail hard beta cutoff, node fails high
@@ -2151,15 +2178,15 @@ static inline int quiescence(int alpha, int beta, BoardContainer boards){
             return 0;
         }
 
-        // fail hard beta cutoff, node fails high
-        if(score >= beta){
-            return beta;
-        }
-
         // fount a better move
         if(score > alpha){
             // PV node
             alpha = score;
+
+            // fail hard beta cutoff, node fails high
+            if(score >= beta){
+                return beta;
+            }
         }
     }
 
@@ -2177,7 +2204,7 @@ static inline int negamax(int alpha, int beta, int depth, BoardContainer boards)
     int hashFlag = hashFlagAlpha;
     
     // check if move has already been searched (is in transposition table)
-    if((score = readHashEntry(alpha, beta, depth, boards.board.hashKey)) != NOT_FOUND){
+    if(ply && (score = readHashEntry(alpha, beta, depth, boards.board.hashKey)) != NOT_FOUND){
         return score;
     }
 
@@ -2214,6 +2241,8 @@ static inline int negamax(int alpha, int beta, int depth, BoardContainer boards)
     if(depth >= 3 && in_check == 0 && ply){
         boards.saveBoard();
 
+        ply++;
+
         // Give enemy an extra move
         boards.board.side ^= 1; 
         // Update hash key
@@ -2227,6 +2256,8 @@ static inline int negamax(int alpha, int beta, int depth, BoardContainer boards)
 
         // Find beta cutoffs within depth - 1 - R moves
         score = -negamax(-beta, -beta + 1, depth - 1 - 2, boards);
+
+        ply--;
 
         boards.restoreBoard();
 
@@ -2298,19 +2329,6 @@ static inline int negamax(int alpha, int beta, int depth, BoardContainer boards)
 
         moves_searched++;
 
-        // fail hard beta cutoff, node fails high
-        if(score >= beta){
-            storeHashEntry(beta, depth, hashFlagBeta, boards.board.hashKey);
-
-            if((move_list.moves[ind].flags & CAPTURE) == 0){
-                // store killer moves
-                killer_moves[1][ply] = killer_moves[0][ply];
-                killer_moves[0][ply] = move_list.moves[ind];
-            }
-
-            return beta;
-        }
-
         // found a better move
         if(score > alpha){
             hashFlag = hashFlagExact;
@@ -2332,12 +2350,25 @@ static inline int negamax(int alpha, int beta, int depth, BoardContainer boards)
             }
 
             pv_length[ply] = pv_length[ply + 1];
+
+            // fail hard beta cutoff, node fails high
+            if(score >= beta){
+                storeHashEntry(beta, depth, hashFlagBeta, boards.board.hashKey);
+
+                if((move_list.moves[ind].flags & CAPTURE) == 0){
+                    // store killer moves
+                    killer_moves[1][ply] = killer_moves[0][ply];
+                    killer_moves[0][ply] = move_list.moves[ind];
+                }
+
+                return beta;
+            }
         }
     }
 
     if(legal_moves == 0){
         if(in_check){
-            return -49000 + ply;
+            return -mate_value + ply;
         }else{
             return 0;
         }
@@ -2363,12 +2394,9 @@ void searchPosition(int depth, BoardContainer boards){
     memset(history_moves, 0, sizeof(history_moves));
     memset(pv_table, 0, sizeof(pv_table));
     memset(pv_length, 0, sizeof(pv_length));
-
-    // clear hash table
-    clearHashTable();
     
-    int alpha = -50000;
-    int beta = 50000;
+    int alpha = -infinity;
+    int beta = infinity;
 
     // iterative deepening
     for(int current_depth = 1; current_depth <= depth; current_depth++){        
@@ -2383,8 +2411,8 @@ void searchPosition(int depth, BoardContainer boards){
         score = negamax(alpha, beta, current_depth, boards);
 
         if(score <= alpha || score >= beta){
-            alpha = -50000;
-            beta = 50000;
+            alpha = -infinity;
+            beta = infinity;
             continue;
         }
 
@@ -2614,6 +2642,7 @@ void uciLoop(){
         // UCI new game command
         if(strncmp(&input[0], "ucinewgame", 10) == 0){
             parsePosition("position startpos");
+            clearHashTable();
             continue;
         }
 
@@ -2646,6 +2675,7 @@ void init(){
     initLeaperAttacks();
     initSliderAttacks();
     init_random_keys();
+    clearHashTable();
 }
 
 /*----------------------------------*/
@@ -2658,9 +2688,13 @@ int main(){
     int debug = 0;
 
     if(debug){
-        BoardContainer boards = BoardContainer("4k3/Q7/8/4K3/8/8/8/8 w - - ");
+        BoardContainer boards = BoardContainer(start_position);
         boards.board.printChessboard();
-        searchPosition(15, boards);
+        searchPosition(10, boards);
+
+        boards.makeMove(pv_table[0][0], all);
+
+        searchPosition(10, boards);
     }else{
         uciLoop();
     }
