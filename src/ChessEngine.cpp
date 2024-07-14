@@ -932,8 +932,18 @@ class Chessboard{
 
     Bitboard hashKey = 0ULL;
 
+    // Tracks old board positions
+    Bitboard repetition_table[1000];
+    int rep_ind = 0;
+
     // Default constructor initializes chessboard to starting position
     Chessboard(){
+        side = White;
+        enpassant = no_sq;
+        castle = 0;
+
+        rep_ind = 0;
+
         // Init white pieces
         pieceBoards[P] = RANK_2;
         pieceBoards[N] = sqr[B1] | sqr[G1];
@@ -965,6 +975,12 @@ class Chessboard{
 
     // Chessboard initializer with a FEN string
     Chessboard(std::string fen){
+        side = White;
+        enpassant = no_sq;
+        castle = 0;
+
+        rep_ind = 0;
+
         int square = 0;
         int index = 0;
         while(square < numSquares){
@@ -1920,6 +1936,7 @@ Move pv_table[MAX_PLY][MAX_PLY];
 // follow PV and score PV move
 int follow_pv, score_pv;
 
+// depth tracker from current node for search
 int ply = 0;
 int nodes = 0;
 
@@ -2125,6 +2142,16 @@ static inline int sortMoves(MoveList &move_list, BoardContainer boards){
 /*              SEARCH              */
 /*----------------------------------*/
 
+static inline bool is_repeated(BoardContainer boards){
+    for(int count = 0; count < boards.board.rep_ind; count++){
+        if(boards.board.repetition_table[count] == boards.board.hashKey){
+            return true;
+        }
+    }
+
+    return false;
+}
+
 // quiescence search
 static inline int quiescence(int alpha, int beta, BoardContainer boards){
     // Check gui input every 2047 nodes
@@ -2162,14 +2189,22 @@ static inline int quiescence(int alpha, int beta, BoardContainer boards){
 
         ply++;
 
+        boards.board.repetition_table[boards.board.rep_ind] = boards.board.hashKey;
+        boards.board.rep_ind++;
+
         if(boards.makeMove(move_list.moves[ind], captures) == 0){
             ply--;
+
+            boards.board.rep_ind--;
+
             continue;
         }
 
         int score = -quiescence(-beta, -alpha, boards);
 
         ply--;
+
+        boards.board.rep_ind--;
 
         boards.restoreBoard();
 
@@ -2202,6 +2237,11 @@ static inline int negamax(int alpha, int beta, int depth, BoardContainer boards)
     int score;
 
     int hashFlag = hashFlagAlpha;
+
+    // if repeated position
+    if(ply && is_repeated(boards)){
+        return 0;
+    }
 
     // Checks if current node is a pv node
     bool isPV = (beta - alpha) > 1;
@@ -2246,6 +2286,9 @@ static inline int negamax(int alpha, int beta, int depth, BoardContainer boards)
 
         ply++;
 
+        boards.board.repetition_table[boards.board.rep_ind] = boards.board.hashKey;
+        boards.board.rep_ind++;
+
         // Give enemy an extra move
         boards.board.side ^= 1; 
         // Update hash key
@@ -2261,6 +2304,8 @@ static inline int negamax(int alpha, int beta, int depth, BoardContainer boards)
         score = -negamax(-beta, -beta + 1, depth - 1 - 2, boards);
 
         ply--;
+
+        boards.board.rep_ind--;
 
         boards.restoreBoard();
 
@@ -2294,8 +2339,14 @@ static inline int negamax(int alpha, int beta, int depth, BoardContainer boards)
 
         ply++;
 
+        boards.board.repetition_table[boards.board.rep_ind] = boards.board.hashKey;
+        boards.board.rep_ind++;
+
         if(boards.makeMove(move_list.moves[ind], all) == 0){
             ply--;
+
+            boards.board.rep_ind--;
+
             continue;
         }
 
@@ -2322,6 +2373,8 @@ static inline int negamax(int alpha, int beta, int depth, BoardContainer boards)
         }
 
         ply--;
+
+        boards.board.rep_ind--;
 
         boards.restoreBoard();
 
@@ -2509,6 +2562,9 @@ void parsePosition(std::string command){
             if(move.from == no_sq){
                 break;
             }
+
+            boardState.board.repetition_table[boardState.board.rep_ind] = boardState.board.hashKey;
+            boardState.board.rep_ind++;
 
             boardState.makeMove(move, all);
 
@@ -2701,12 +2757,8 @@ int main(){
     int debug = 0;
 
     if(debug){
-        BoardContainer boards = BoardContainer(start_position);
+        BoardContainer boards = BoardContainer("2r3k1/R7/8/1R6/8/8/P4KPP/8 w - - 0 40");
         boards.board.printChessboard();
-        searchPosition(10, boards);
-
-        boards.makeMove(pv_table[0][0], all);
-
         searchPosition(10, boards);
     }else{
         uciLoop();
