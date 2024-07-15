@@ -15,24 +15,31 @@
 // 8x8 chess board represented as 64 bits
 #define Bitboard unsigned long long
 
-// bitboards representing the files and ranks of a chessboard
-constexpr Bitboard FILE_A = 0x0101010101010101;
-constexpr Bitboard FILE_B = 0x0202020202020202;
-constexpr Bitboard FILE_C = 0x0404040404040404;
-constexpr Bitboard FILE_D = 0x0808080808080808;
-constexpr Bitboard FILE_E = 0x1010101010101010;
-constexpr Bitboard FILE_F = 0x2020202020202020;
-constexpr Bitboard FILE_G = 0x4040404040404040;
-constexpr Bitboard FILE_H = 0x8080808080808080;
+enum fileIndex {FILE_A, FILE_B, FILE_C, FILE_D, FILE_E, FILE_F, FILE_G, FILE_H};
+enum rankIndex {RANK_8, RANK_7, RANK_6, RANK_5, RANK_4, RANK_3, RANK_2, RANK_1};
 
-constexpr Bitboard RANK_1 = 0xFF00000000000000;
-constexpr Bitboard RANK_2 = 0x00FF000000000000;
-constexpr Bitboard RANK_3 = 0x0000FF0000000000;
-constexpr Bitboard RANK_4 = 0x000000FF00000000;
-constexpr Bitboard RANK_5 = 0x00000000FF000000;
-constexpr Bitboard RANK_6 = 0x0000000000FF0000;
-constexpr Bitboard RANK_7 = 0x000000000000FF00;
-constexpr Bitboard RANK_8 = 0x00000000000000FF;
+// bitboards representing the files and ranks of a chessboard
+constexpr Bitboard files[] = {
+    0x0101010101010101,
+    0x0202020202020202,
+    0x0404040404040404,
+    0x0808080808080808,
+    0x1010101010101010,
+    0x2020202020202020,
+    0x4040404040404040,
+    0x8080808080808080
+};
+
+constexpr Bitboard ranks[] = {
+    0x00000000000000FF,
+    0x000000000000FF00,
+    0x0000000000FF0000,
+    0x00000000FF000000,
+    0x000000FF00000000,
+    0x0000FF0000000000,
+    0x00FF000000000000,
+    0xFF00000000000000
+};
 
 constexpr Bitboard ALL_SET = 0xFFFFFFFFFFFFFFFF;
 
@@ -677,7 +684,7 @@ Bitboard find_magic(int square, int bits, int isBishop){
     for(int mag_count = 0; mag_count < 100000000; mag_count++){
         Bitboard magic = generateMagic();
 
-        if(countBits((magic * atk_mask) & RANK_1) < 6) continue;
+        if(countBits((magic * atk_mask) & ranks[RANK_1]) < 6) continue;
 
         std::memset(used_atks, 0ULL, sizeof(used_atks));
 
@@ -722,11 +729,11 @@ Bitboard genPawnAttacks(Colour c, int square){
     Bitboard temp = 1ULL << square;
     Bitboard attack = 0ULL;
     if(c == White){
-        attack |= ~FILE_A & temp >> 7;
-        attack |= ~FILE_H & temp >> 9;
+        attack |= ~files[FILE_A] & temp >> 7;
+        attack |= ~files[FILE_H] & temp >> 9;
     }else{
-        attack |= ~FILE_A & temp << 9;
-        attack |= ~FILE_H & temp << 7;
+        attack |= ~files[FILE_A] & temp << 9;
+        attack |= ~files[FILE_H] & temp << 7;
     }
 
     return attack;
@@ -737,15 +744,15 @@ Bitboard genKnightMoves(int square){
     Bitboard temp = 1ULL << square;
     Bitboard moves = 0ULL;
 
-    moves |= ~FILE_A & ~FILE_B & temp >> 6;
-    moves |= ~FILE_H & ~FILE_G & temp >> 10;
-    moves |= ~FILE_A & temp >> 15;
-    moves |= ~FILE_H & temp >> 17;
+    moves |= ~files[FILE_A] & ~files[FILE_B] & temp >> 6;
+    moves |= ~files[FILE_H] & ~files[FILE_G] & temp >> 10;
+    moves |= ~files[FILE_A] & temp >> 15;
+    moves |= ~files[FILE_H] & temp >> 17;
 
-    moves |= ~FILE_H & ~FILE_G & temp << 6;
-    moves |= ~FILE_A & ~FILE_B & temp << 10;
-    moves |= ~FILE_H & temp << 15;
-    moves |= ~FILE_A & temp << 17;
+    moves |= ~files[FILE_H] & ~files[FILE_G] & temp << 6;
+    moves |= ~files[FILE_A] & ~files[FILE_B] & temp << 10;
+    moves |= ~files[FILE_H] & temp << 15;
+    moves |= ~files[FILE_A] & temp << 17;
 
     return moves;
 }
@@ -756,18 +763,18 @@ Bitboard genKingMoves(int square){
     Bitboard moves = 0ULL;
     
     //right moves
-    moves |= ~FILE_A & temp >> 7;
-    moves |= ~FILE_A & temp << 1;
-    moves |= ~FILE_A & temp << 9;
+    moves |= ~files[FILE_A] & temp >> 7;
+    moves |= ~files[FILE_A] & temp << 1;
+    moves |= ~files[FILE_A] & temp << 9;
 
     //up down
     moves |= temp >> 8;
     moves |= temp << 8;
 
     //left moves
-    moves |= ~FILE_H & temp >> 9;
-    moves |= ~FILE_H & temp >> 1;
-    moves |= ~FILE_H & temp << 7;
+    moves |= ~files[FILE_H] & temp >> 9;
+    moves |= ~files[FILE_H] & temp >> 1;
+    moves |= ~files[FILE_H] & temp << 7;
 
     return moves;
 }
@@ -945,7 +952,7 @@ class Chessboard{
         rep_ind = 0;
 
         // Init white pieces
-        pieceBoards[P] = RANK_2;
+        pieceBoards[P] = ranks[RANK_2];
         pieceBoards[N] = sqr[B1] | sqr[G1];
         pieceBoards[B] = sqr[C1] | sqr[F1];
         pieceBoards[R] = sqr[A1] | sqr[H1];
@@ -953,7 +960,7 @@ class Chessboard{
         pieceBoards[K] = sqr[E1];
 
         // Init black pieces
-        pieceBoards[p] = RANK_7;
+        pieceBoards[p] = ranks[RANK_7];
         pieceBoards[n] = sqr[B8] | sqr[G8];
         pieceBoards[b] = sqr[C8] | sqr[F8];
         pieceBoards[r] = sqr[A8] | sqr[H8];
@@ -1087,7 +1094,7 @@ class Chessboard{
                 if(piece == P){
                     while(pieceBitboard){
                         from = findLSB(pieceBitboard);
-                        canPromote = sqr[from] & RANK_7;
+                        canPromote = sqr[from] & ranks[RANK_7];
                         to = from + UP;
 
                         if(to >= 0 && !getSquare(occupancies[Both], to)){
@@ -1101,7 +1108,7 @@ class Chessboard{
                                 // Pawn push
                                 move_list.addMove(Move(from, to, piece, 0, 0));
                                 //Double pawn push
-                                if((sqr[from] & RANK_2) && !getSquare(occupancies[Both], to + UP)){
+                                if((sqr[from] & ranks[RANK_2]) && !getSquare(occupancies[Both], to + UP)){
                                     move_list.addMove(Move(from, to + UP, piece, 0, DOUBLE_PUSH));
                                 }
                             }
@@ -1159,7 +1166,7 @@ class Chessboard{
                 if(piece == p){
                     while(pieceBitboard){
                         from = findLSB(pieceBitboard);
-                        canPromote = sqr[from] & RANK_2;
+                        canPromote = sqr[from] & ranks[RANK_2];
 
                         to = from + DOWN;
 
@@ -1174,7 +1181,7 @@ class Chessboard{
                                 // Pawn push
                                 move_list.addMove(Move(from, to, piece, 0, 0));
                                 //Double pawn push
-                                if((sqr[from] & RANK_7) && !getSquare(occupancies[Both], to + DOWN)){
+                                if((sqr[from] & ranks[RANK_7]) && !getSquare(occupancies[Both], to + DOWN)){
                                     move_list.addMove(Move(from, to + DOWN, piece, 0, DOUBLE_PUSH));
                                 }
                             }
@@ -1825,6 +1832,59 @@ const int mirror_score[64] =
     A7, B7, C7, D7, E7, F7, G7, H7,
     A8, B8, C8, D8, E8, F8, G8, H8
 };
+
+// Masks for pawn structure evaluation
+// file mask [square]
+Bitboard fileMask[64];
+// rank mask [square]
+Bitboard rankMask[64];
+// Non-connected pawns mask[square]
+Bitboard isolatedMask[64];
+// passed pawns [side][square]
+Bitboard passedMask[2][64];
+
+constexpr int get_rank[64] =
+{
+    7, 7, 7, 7, 7, 7, 7, 7,
+    6, 6, 6, 6, 6, 6, 6, 6,
+    5, 5, 5, 5, 5, 5, 5, 5,
+    4, 4, 4, 4, 4, 4, 4, 4,
+    3, 3, 3, 3, 3, 3, 3, 3,
+    2, 2, 2, 2, 2, 2, 2, 2,
+    1, 1, 1, 1, 1, 1, 1, 1,
+	0, 0, 0, 0, 0, 0, 0, 0
+};
+
+constexpr int double_pawn_penalty = -10;
+constexpr int isolated_pawn_penalty = -10;
+constexpr int passed_pawn_bonus[8] = { 0, 10, 30, 50, 75, 100, 150, 200 }; 
+
+void initPawnMasks(){
+    for(int rank = RANK_8; rank <= RANK_1; rank++){
+        for(int file = FILE_A; file <= FILE_H; file++){
+            int square = rank*8 + file;
+
+            // Initializing rank and file masks
+            fileMask[square] = files[file];
+            rankMask[square] = ranks[rank];
+
+            // Initializing isolated pawn masks
+            isolatedMask[square] = ((file == FILE_A) ? 0ULL:files[file - 1]) | ((file == FILE_H) ? 0ULL:files[file + 1]);
+
+            // Initializing passed pawns mask
+            passedMask[White][square] = ((file == FILE_A) ? 0ULL:files[file - 1]) | files[file] | ((file == FILE_H) ? 0ULL:files[file + 1]);
+            passedMask[Black][square] = ((file == FILE_A) ? 0ULL:files[file - 1]) | files[file] | ((file == FILE_H) ? 0ULL:files[file + 1]);
+
+            for(int a = RANK_1; a >= rank; a--){
+                passedMask[White][square] &= ~ranks[a];
+            }
+
+            for(int a = RANK_8; a <= rank; a++){
+                passedMask[Black][square] &= ~ranks[a];
+            }
+        }
+    }
+}
 
 static inline int evaluate(BoardContainer boards){
     int score = 0;
@@ -2744,6 +2804,7 @@ void init(){
     initLeaperAttacks();
     initSliderAttacks();
     init_random_keys();
+    initPawnMasks();
     clearHashTable();
 }
 
@@ -2754,12 +2815,12 @@ void init(){
 int main(){
     init();
 
-    int debug = 0;
+    int debug = 1;
 
     if(debug){
-        BoardContainer boards = BoardContainer("2r3k1/R7/8/1R6/8/8/P4KPP/8 w - - 0 40");
+        BoardContainer boards = BoardContainer("8/8/8/8/8/8/8/8 w - - ");
         boards.board.printChessboard();
-        searchPosition(10, boards);
+        std::cout << "Score: " << evaluate(boards);
     }else{
         uciLoop();
     }
