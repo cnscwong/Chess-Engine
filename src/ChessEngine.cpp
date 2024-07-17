@@ -120,7 +120,6 @@ enum Castling {wKingside = 1, wQueenside = 2, bKingside = 4, bQueenside = 8, ALL
 #define start_position "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1 "
 #define tricky_position "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1 "
 #define killer_position "rnbqkb1r/pp1p1pPp/8/2p1pP2/1P1P4/3P3P/P1P1P3/RNBQKBNR w KQkq e6 0 1"
-#define cmk_position "r2q1rk1/ppp2ppp/2n1bn2/2b1p3/3pP3/3P1NPP/PPP1NPB1/R1BQ1RK1 b - - 0 9 "
 
 bool validSquare(int square){
     return square >= 0 && square < 64;
@@ -1635,7 +1634,7 @@ class BoardContainer{
 /*----------------------------------*/
 
 const int perftDepth = 5;
-long node_count[perftDepth + 1] = {0};
+unsigned long long node_count[perftDepth + 1] = {0};
 
 // Counts all possible moves for a certain depth to compare with a working chess engine move generator to see if there are any bugs
 static inline void perftDriver(int depth, BoardContainer boards){
@@ -1678,11 +1677,11 @@ void perftTest(int depth, BoardContainer boards){
             continue;
         }
 
-        long old_nodes = node_count[0];
+        unsigned long long old_nodes = node_count[0];
 
         perftDriver(depth - 1, boards);
 
-        long nodesPerDriver = node_count[0] - old_nodes;
+        unsigned long long nodesPerDriver = node_count[0] - old_nodes;
 
         boards.restoreBoard();
 
@@ -1784,7 +1783,7 @@ constexpr int bishop_score[64] =
 {
      0,   0,   0,   0,   0,   0,   0,   0,
      0,   0,   0,   0,   0,   0,   0,   0,
-     0,   0,   0,  10,  10,   0,   0,   0,
+     0,  20,   0,  10,  10,   0,  20,   0,
      0,   0,  10,  20,  20,  10,   0,   0,
      0,   0,  10,  20,  20,  10,   0,   0,
      0,  10,   0,   0,   0,   0,  10,   0,
@@ -1857,7 +1856,12 @@ constexpr int get_rank[64] =
 
 constexpr int double_pawn_penalty = -10;
 constexpr int isolated_pawn_penalty = -10;
-constexpr int passed_pawn_bonus[8] = { 0, 10, 30, 50, 75, 100, 150, 200 }; 
+constexpr int passed_pawn_bonus[8] = { 0, 10, 30, 50, 75, 100, 150, 200 };
+
+constexpr int semi_open_file_bonus = 10;
+constexpr int open_file_bonus = 15;
+
+constexpr int king_prot_bonus = 5;
 
 void initPawnMasks(){
     for(int rank = RANK_8; rank <= RANK_1; rank++){
@@ -1904,43 +1908,118 @@ static inline int evaluate(BoardContainer boards){
             switch(piece){
                 case P:{
                     score += pawn_score[square];
+
+                    int doublePawnCount = countBits(boards.board.pieceBoards[P] & fileMask[square]);
+
+                    if(doublePawnCount > 1){
+                        score += doublePawnCount*double_pawn_penalty;
+                    }
+
+                    if((boards.board.pieceBoards[P] & isolatedMask[square]) == 0){
+                        score += isolated_pawn_penalty;
+                    }
+
+                    if((boards.board.pieceBoards[p] & passedMask[White][square]) == 0){
+                        score += passed_pawn_bonus[get_rank[square]];
+                    }
+
                     break;
-                }
-                case N:{
+                }case N:{
                     score += knight_score[square];
                     break;
-                }
-                case B:{
+                }case B:{
                     score += bishop_score[square];
-                    break;
-                }
-                case R:{
-                    score += rook_score[square];
-                    break;
-                }
-                case K:{
-                    score += king_score[square];
-                    break;
-                }
 
-                case p:{
-                    score -= pawn_score[mirror_score[square]];
+                    // Bishop mobility bonus
+                    score += countBits(getBishopAttacks(square, boards.board.occupancies[Both]));
+
                     break;
-                }
-                case n:{
+                }case R:{
+                    score += rook_score[square];
+
+                    if((boards.board.pieceBoards[P] & fileMask[square]) == 0){
+                        score += semi_open_file_bonus;
+                    }
+
+                    if(((boards.board.pieceBoards[P] | boards.board.pieceBoards[p]) & fileMask[square]) == 0){
+                        score += open_file_bonus;
+                    }
+
+                    break;
+                }case Q:{
+                    score += countBits(getQueenAttacks(square, boards.board.occupancies[Both]));
+
+                    break;
+                }case K:{
+                    score += king_score[square];
+
+                    if((boards.board.pieceBoards[P] & fileMask[square]) == 0){
+                        score -= semi_open_file_bonus;
+                    }
+
+                    if(((boards.board.pieceBoards[P] | boards.board.pieceBoards[p]) & fileMask[square]) == 0){
+                        score -= open_file_bonus;
+                    }
+
+                    score += king_prot_bonus*countBits(king_attacks[square] & boards.board.occupancies[White]);
+
+                    break;
+                }case p:{
+                    score -= pawn_score[mirror_score[square]];
+
+                    int doublePawnCount = countBits(boards.board.pieceBoards[p] & fileMask[square]);
+
+                    if(doublePawnCount > 1){
+                        score -= doublePawnCount*double_pawn_penalty;
+                    }
+
+                    if((boards.board.pieceBoards[p] & isolatedMask[square]) == 0){
+                        score -= isolated_pawn_penalty;
+                    }
+
+                    if((boards.board.pieceBoards[P] & passedMask[Black][square]) == 0){
+                        score -= passed_pawn_bonus[get_rank[mirror_score[square]]];
+                    }
+
+                    break;
+                }case n:{
                     score -= knight_score[mirror_score[square]];
                     break;
-                }
-                case b:{
+                }case b:{
                     score -= bishop_score[mirror_score[square]];
+
+                    score -= countBits(getBishopAttacks(square, boards.board.occupancies[Both]));
+
                     break;
-                }
-                case r:{
+                }case r:{
                     score -= rook_score[mirror_score[square]];
+
+                    if((boards.board.pieceBoards[p] & fileMask[square]) == 0){
+                        score -= semi_open_file_bonus;
+                    }
+
+                    if(((boards.board.pieceBoards[p] | boards.board.pieceBoards[P]) & fileMask[square]) == 0){
+                        score -= open_file_bonus;
+                    }
+
                     break;
-                }
-                case k:{
+                }case q:{
+                    score -= countBits(getQueenAttacks(square, boards.board.occupancies[Both]));
+
+                    break;
+                }case k:{
                     score -= king_score[mirror_score[square]];
+
+                    if((boards.board.pieceBoards[p] & fileMask[square]) == 0){
+                        score += semi_open_file_bonus;
+                    }
+
+                    if(((boards.board.pieceBoards[p] | boards.board.pieceBoards[P]) & fileMask[square]) == 0){
+                        score += open_file_bonus;
+                    }
+
+                    score -= king_prot_bonus*countBits(king_attacks[square] & boards.board.occupancies[Black]);
+
                     break;
                 }
             }
@@ -1998,14 +2077,14 @@ int follow_pv, score_pv;
 
 // depth tracker from current node for search
 int ply = 0;
-int nodes = 0;
+unsigned long long nodes = 0;
 
 /*----------------------------------*/
 /*      TRANSPOSITION TABLES        */
 /*----------------------------------*/
 
 // hash table size
-#define HASH_SIZE 0x400000
+#define HASH_SIZE 800000
 
 #define NOT_FOUND 100000
 
@@ -2716,7 +2795,9 @@ void parseGo(std::string command)
 
         // set up timing
         timeTracker /= movestogo;
-        timeTracker -= 50;
+        if(timeTracker > 1500){
+            timeTracker -= 50;
+        }
         stoptime = starttime + timeTracker + inc;
     }
 
@@ -2747,8 +2828,9 @@ void uciLoop(){
 
     while(1){
         fflush(stdout);
-
+        input = "\n\0";
         getline(std::cin, input);
+        std::cout << "Parsing input: " << input << std::endl;
 
         if(input[0] == '\n'){
             continue;
@@ -2815,10 +2897,10 @@ void init(){
 int main(){
     init();
 
-    int debug = 1;
+    int debug = 0;
 
     if(debug){
-        BoardContainer boards = BoardContainer("8/8/8/8/8/8/8/8 w - - ");
+        BoardContainer boards = BoardContainer("6k1/ppppprbp/8/8/8/8/PPPPPRBP/6K1 w - - ");
         boards.board.printChessboard();
         std::cout << "Score: " << evaluate(boards);
     }else{
