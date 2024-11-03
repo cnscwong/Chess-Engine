@@ -10,8 +10,13 @@ The chessboard is represented by a 64-bit unsigned integer (bitboard) where each
 In order to generate legal moves, the engine needs to know what moves for each piece are actually possible. To avoid recalculating the moves of a piece in the same position multiple times, precalculated move/attack lookup tables are generated for each piece and square beforehand so possible moves takes O(1) time.
 
 ## Move Generation
+Takes the current board position and who is making the next move(white or black) to generate a list of legal moves. Lookup tables were used to generate the moves for pawns, knights, and the king. Magic bitboards which is an algorithm using random numbers and hashing was used for bishops, rooks, and queens as lookup tables are inefficient for these pieces since they can be blocked by enemy and friendly pieces.
 
-## Search and Evaluation
+## Evaluation
+Board evaluation is the process of scoring a given board position based off of pieces, their positions, and other metrics such as king safety or piece mobility. This score reflects which side is winning in the chess game.
+
+## Move Search
+Searching for the best move for a chess position requires generating a "move tree", all possible combinations of legal moves that can occur in n turns(n is dependent on the strength and efficiency of the chess engine). This move tree is searched to find the branch that results in the highest score for the current player while also maximizing the enemy moves scores. This is similar to thinking about what the best move for your opponent would be after you play your move, otherwise, the chess engine would find the best branch on the tree where your opponent makes the worst moves possible. Searching through a move tree is very inefficient, especially as n increases, so pruning algorithms to stop searching through certain branches are used to optimize the search process.
 
 ## Acknowledgements
 https://www.chessprogramming.org/Main_Page
